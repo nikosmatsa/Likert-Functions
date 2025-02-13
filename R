@@ -1,3 +1,42 @@
+library(tidyverse)
+library(ggstats)
+library(flextable)
+library(patchwork)
+library(tidytext)
+library(stringr)
+
+
+
+custom_colors = c(
+  "Very \n Dissatisfied" = "#ed2e1c",
+  "Dissatisfied" = "#e09c95",
+  "Neutral" = "#85c1e9",
+  "Satisfied" = "#7FF98B",
+  "Very \n Satisfied" = "#04B431"
+)
+
+likert_levels = c("Very \n Dissatisfied",
+                  "Dissatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very \n Satisfied")
+
+
+likert_levels_na = c("Not \n Available",
+                   "Very \n Dissatisfied",
+                  "Dissatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very \n Satisfied")
+
+
+custom_colors_na = c("Not \n Available" = "black",
+  "Very \n Dissatisfied" = "#ed2e1c",
+  "Dissatisfied" = "#e09c95",
+  "Neutral" = "#85c1e9",
+  "Satisfied" = "#7FF98B",
+  "Very \n Satisfied" = "#04B431"
+)
 
 
 likert_fun = function(data, col1 , col2, year, threshold,
