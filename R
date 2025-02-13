@@ -2802,7 +2802,7 @@ theme_MATSAVELAS <- function(x,
 bar_category = function(data, column) {
   
   
-  filter_df = Campframerecords %>%
+  filter_df = data %>%
     select({{ column }}) %>%
     group_by({{ column }}) %>%
     count()
