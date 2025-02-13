@@ -1,0 +1,3116 @@
+
+
+likert_fun = function(data, col1 , col2, year, threshold,
+                      sorting,likert_levels,custom_colors) {
+  require(tidyverse)
+  require(ggstats)
+  
+  filter_df = data %>%
+    dplyr::filter(Year == year) %>%
+    dplyr::select({{ col2 }}) %>%
+    dplyr::filter({{ col2 }} != "")%>%
+    dplyr::group_by({{ col2 }}) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::filter(n >= threshold)%>%
+    tidyr::drop_na()%>%
+    dplyr::arrange(desc(n))
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  if (sorting == "worst") {
+    df = data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in%  parameters) %>%
+      dplyr::select({{ col1 }}, {{ col2 }}) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 1 ~ likert_levels[1],
+          satisfaction == 2 ~ likert_levels[2],
+          satisfaction == 3 ~ likert_levels[3],
+          satisfaction == 4 ~ likert_levels[4],
+          satisfaction == 5 ~ likert_levels[5],
+          TRUE~NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels),
+                    var = reorder(var, ave(as.numeric(val), var, FUN = \(x) {
+                      sum(x %in% 1:2) / length(x[!is.na(x)])
+                    })))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest",
+      ) %>%
+      dplyr::select(-row)
+    
+    v1 = ggstats::gglikert(df2) +
+      aes(y = reorder(
+        factor(.question, levels = levels(df$var)),
+        ave(as.numeric(.answer), .question, FUN = \(x) {
+          sum(x %in% 1:2) / length(x[!is.na(x)])
+        })
+      )) + scale_fill_manual(values = custom_colors) +
+      labs(y = NULL) +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = levels_group))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    
+    return(list(v1, v2))
+  } else if(sorting == "best"){
+    df = data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in%  parameters) %>%
+      dplyr::select({{ col1 }}, {{ col2 }}) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 1 ~ likert_levels[1],
+          satisfaction == 2 ~ likert_levels[2],
+          satisfaction == 3 ~ likert_levels[3],
+          satisfaction == 4 ~ likert_levels[4],
+          satisfaction == 5 ~ likert_levels[5],
+          TRUE~NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels),
+                    var = reorder(var, ave(as.numeric(val), var, FUN = \(x) {
+                      sum(x %in% 4:5) / length(x[!is.na(x)])
+                    })))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest",
+      ) %>%
+      dplyr::select(-row)
+    
+    v1 = ggstats::gglikert(df2) +
+      aes(y = reorder(
+        factor(.question, levels = levels(df$var)),
+        ave(as.numeric(.answer), .question, FUN = \(x) {
+          sum(x %in% 4:5) / length(x[!is.na(x)])
+        })
+      )) + scale_fill_manual(values = custom_colors) + labs(y = "") +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = levels_group))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    
+    return(list(v1, v2))}else if(sorting == "bar"){
+      df = data %>%
+        dplyr::filter(Year == year) %>%
+        dplyr::filter({{ col2 }} %in%  parameters) %>%
+        dplyr::select({{ col1 }}, {{ col2 }}) %>%
+        tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+        dplyr::select(-categ) %>%
+        dplyr::mutate(
+          satisfaction = case_when(
+            satisfaction == 1 ~ likert_levels[1],
+            satisfaction == 2 ~ likert_levels[2],
+            satisfaction == 3 ~ likert_levels[3],
+            satisfaction == 4 ~ likert_levels[4],
+            satisfaction == 5 ~ likert_levels[5],
+            TRUE~NA_character_
+          )
+        ) %>%
+        dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+        dplyr::mutate(val = factor(val, likert_levels),
+                      var = reorder(var, ave(as.numeric(val), var, FUN = \(x) {
+                        sum(x %in% 4:5) / length(x[!is.na(x)])
+                      })))
+      
+      levels_group = levels(df$var)
+      
+      df2 = df %>%
+        dplyr::filter(var %in% levels_group) %>%
+        dplyr::group_by(var) %>%
+        dplyr::mutate(row = row_number()) %>%
+        tidyr::pivot_wider(
+          names_from = var,
+          values_from = val,
+          names_vary = "fastest",
+        ) %>%
+        dplyr::select(-row)
+      
+      v1 = ggstats::gglikert(df2) +
+        aes(y = factor(.question, levels = rev(parameters))) +  
+        scale_fill_manual(values = custom_colors) + 
+        labs(y = "") +
+        theme(
+          panel.border = element_rect(color = "gray", fill = NA),
+          axis.text.x = element_blank(),
+          legend.position = "none"
+        )
+      filter_df = filter_df %>%
+        dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = rev(parameters)))
+      
+      
+      v2  = filter_df %>%
+        ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+        geom_bar(stat = "identity", fill = "lightgrey") +
+        geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+        theme_light() +
+        theme(
+          panel.border = element_rect(color = "gray", fill = NA),
+          axis.text.x = element_blank(),
+          legend.position = "none"
+        ) +
+        labs(x = NULL, y = NULL)
+      return(list(v1,v2,filter_df))
+      
+    }
+}
+
+likert_fun_multi = function(data, col2,Columns, year, threshold, 
+                            sorting,likert_levels,custom_colors){
+  require(tidyverse)
+  require(ggstats)
+  
+
+  
+  filter_df = data %>%
+    dplyr::filter(Year == year) %>%
+    dplyr::select({{ col2 }}) %>%
+    dplyr::filter({{ col2 }} != "")%>%
+    dplyr::group_by({{ col2 }}) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::filter(n >= threshold)%>%
+    dplyr::arrange(desc(n))
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  if (sorting == "worst") {
+    df =  data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in% parameters) %>%
+      dplyr::select({{ col2 }}, all_of(Columns)) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 1 ~ likert_levels[1],
+          satisfaction == 2 ~ likert_levels[2],
+          satisfaction == 3 ~ likert_levels[3],
+          satisfaction == 4 ~ likert_levels[4],
+          satisfaction == 5 ~ likert_levels[5],
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels),
+                    var = reorder(var, ave(
+                      as.numeric(val), var, FUN = \(x) sum(x %in% 1:2) / length(x[!is.na(x)])
+                    )))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest"
+      ) %>%
+      dplyr::select(-row)
+    
+    v1  = ggstats::gglikert(df2) +
+      aes(y = reorder(
+        factor(.question, levels = levels(df$var)),
+        ave(
+          as.numeric(.answer),
+          .question,
+          FUN = \(x) sum(x %in% 1:2) / length(x[!is.na(x)])
+        )
+      )) +
+      scale_fill_manual(values = custom_colors) +
+      labs(y = "") +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = levels_group))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    return(list(v1, v2))
+  } else if(sorting == "best"){
+    df = data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in% parameters) %>%
+      dplyr::select({{ col2 }}, all_of(Columns)) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 1 ~ likert_levels[1],
+          satisfaction == 2 ~ likert_levels[2],
+          satisfaction == 3 ~ likert_levels[3],
+          satisfaction == 4 ~ likert_levels[4],
+          satisfaction == 5 ~ likert_levels[5],
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels),
+                    var = reorder(var, ave(
+                      as.numeric(val), var, FUN = \(x) sum(x %in% 4:5) / length(x[!is.na(x)])
+                    )))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest"
+      ) %>%
+      dplyr::select(-row)
+    
+    v1 = ggstats::gglikert(df2) +
+      aes(y = reorder(
+        factor(.question, levels = levels(df$var)),
+        ave(
+          as.numeric(.answer),
+          .question,
+          FUN = \(x) sum(x %in% 4:5) / length(x[!is.na(x)])
+        )
+      )) +
+      scale_fill_manual(values = custom_colors) +
+      labs(y = "") +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = levels_group))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    return(list(v1, v2))
+    
+  } else if(sorting == "bar"){
+    
+    df = data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in% parameters) %>%
+      dplyr::select({{ col2 }}, all_of(Columns)) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 1 ~ likert_levels[1],
+          satisfaction == 2 ~ likert_levels[2],
+          satisfaction == 3 ~ likert_levels[3],
+          satisfaction == 4 ~ likert_levels[4],
+          satisfaction == 5 ~ likert_levels[5],
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels),
+                    var = factor(var,levels = parameters))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest"
+      ) %>%
+      dplyr::select(-row)
+    
+    
+    v1 = ggstats::gglikert(df2) +
+      aes(y = factor(.question, levels = rev(parameters))) +  
+      scale_fill_manual(values = custom_colors) + 
+      labs(y = "") +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = rev(parameters)))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    return(list(v1,v2,filter_df))
+  }
+}
+
+
+likert_fun_multi_na = function(data, col2,Columns, year, threshold, 
+                            sorting,likert_levels_na,custom_colors_na){
+  require(tidyverse)
+  require(ggstats)
+  
+  
+  
+  filter_df = data %>%
+    dplyr::filter(Year == year) %>%
+    dplyr::select({{ col2 }}) %>%
+    dplyr::filter({{ col2 }} != "")%>%
+    dplyr::group_by({{ col2 }}) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::filter(n >= threshold)%>%
+    dplyr::arrange(desc(n))
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  if (sorting == "worst") {
+    df =  data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in% parameters) %>%
+      dplyr::select({{ col2 }}, all_of(Columns)) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::mutate(satisfaction = ifelse(is.na(satisfaction), 0, satisfaction))%>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 0 ~ likert_levels_na[1],
+          satisfaction == 1 ~ likert_levels_na[2],
+          satisfaction == 2 ~ likert_levels_na[3],
+          satisfaction == 3 ~ likert_levels_na[4],
+          satisfaction == 4 ~ likert_levels_na[5],
+          satisfaction == 5 ~ likert_levels_na[6],
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels_na),
+                    var = reorder(var, ave(
+                      as.numeric(val), var, FUN = \(x) sum(x %in% 1:2) / length(x[!is.na(x)])
+                    )))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest"
+      ) %>%
+      dplyr::select(-row)
+    
+    v1  = ggstats::gglikert(df2) +
+      aes(y = reorder(
+        factor(.question, levels = levels(df$var)),
+        ave(
+          as.numeric(.answer),
+          .question,
+          FUN = \(x) sum(x %in% 1:2) / length(x[!is.na(x)])
+        )
+      )) +
+      scale_fill_manual(values = custom_colors_na) +
+      labs(y = "") +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = levels_group))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    return(list(v1, v2))
+  } else if(sorting == "best"){
+    df = data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in% parameters) %>%
+      dplyr::select({{ col2 }}, all_of(Columns)) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::mutate(satisfaction = ifelse(is.na(satisfaction), 0, satisfaction))%>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 0 ~ likert_levels_na[1],
+          satisfaction == 1 ~ likert_levels_na[2],
+          satisfaction == 2 ~ likert_levels_na[3],
+          satisfaction == 3 ~ likert_levels_na[4],
+          satisfaction == 4 ~ likert_levels_na[5],
+          satisfaction == 5 ~ likert_levels_na[6],
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels_na),
+                    var = reorder(var, ave(
+                      as.numeric(val), var, FUN = \(x) sum(x %in% 4:5) / length(x[!is.na(x)])
+                    )))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest"
+      ) %>%
+      dplyr::select(-row)
+    
+    v1 = ggstats::gglikert(df2) +
+      aes(y = reorder(
+        factor(.question, levels = levels(df$var)),
+        ave(
+          as.numeric(.answer),
+          .question,
+          FUN = \(x) sum(x %in% 4:5) / length(x[!is.na(x)])
+        )
+      )) +
+      scale_fill_manual(values = custom_colors_na) +
+      labs(y = "") +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = levels_group))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    return(list(v1, v2))
+    
+  } else if(sorting == "bar"){
+    
+    df = data %>%
+      dplyr::filter(Year == year) %>%
+      dplyr::filter({{ col2 }} %in% parameters) %>%
+      dplyr::select({{ col2 }}, all_of(Columns)) %>%
+      tidyr::pivot_longer(!{{ col2 }}, names_to = "categ", values_to = "satisfaction") %>%
+      dplyr::mutate(satisfaction = ifelse(is.na(satisfaction), 0, satisfaction))%>%
+      dplyr::select(-categ) %>%
+      dplyr::mutate(
+        satisfaction = case_when(
+          satisfaction == 0 ~ likert_levels_na[1],
+          satisfaction == 1 ~ likert_levels_na[2],
+          satisfaction == 2 ~ likert_levels_na[3],
+          satisfaction == 3 ~ likert_levels_na[4],
+          satisfaction == 4 ~ likert_levels_na[5],
+          satisfaction == 5 ~ likert_levels_na[6],
+          TRUE ~ NA_character_
+        )
+      ) %>%
+      dplyr::rename(val = satisfaction, var = {{ col2 }}) %>%
+      dplyr::mutate(val = factor(val, likert_levels_na),
+                    var = factor(var,levels = parameters))
+    
+    levels_group = levels(df$var)
+    
+    df2 = df %>%
+      dplyr::filter(var %in% levels_group) %>%
+      dplyr::group_by(var) %>%
+      dplyr::mutate(row = row_number()) %>%
+      tidyr::pivot_wider(
+        names_from = var,
+        values_from = val,
+        names_vary = "fastest"
+      ) %>%
+      dplyr::select(-row)
+    
+    
+    v1 = ggstats::gglikert(df2) +
+      aes(y = factor(.question, levels = rev(parameters))) +  
+      scale_fill_manual(values = custom_colors_na) + 
+      labs(y = "") +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    filter_df = filter_df %>%
+      dplyr::mutate({{ col2 }} := factor({{ col2 }}, levels = rev(parameters)))
+    
+    
+    v2  = filter_df %>%
+      ggplot2::ggplot(aes(y = {{ col2 }}, x = n)) +
+      geom_bar(stat = "identity", fill = "lightgrey") +
+      geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+      theme_light() +
+      theme(
+        panel.border = element_rect(color = "gray", fill = NA),
+        axis.text.x = element_blank(),
+        legend.position = "none"
+      ) +
+      labs(x = NULL, y = NULL)
+    return(list(v1,v2,filter_df))
+  }
+}
+
+
+likert_year = function(data,years, cols,likert_levels,custom_colors) {
+  require(tidyverse)
+  require(ggstats)
+  
+ 
+  
+  
+  
+  all_over2 = data %>%
+    select(Year) %>%
+    group_by(Year) %>%
+    summarise(n = n())
+  
+  df = data %>%
+    select(c(Year, all_of(cols))) %>%
+    filter(Year %in% years) %>%
+    dplyr::mutate(Year = factor(Year, levels = years)) %>%
+    pivot_longer(!Year, names_to = "categ", values_to = "satisfaction") %>%
+    select(-c(categ)) %>%
+    mutate(across(
+      -Year,
+      ~ case_when(
+        . == "1" ~ likert_levels[1],
+        . == "2" ~ likert_levels[2],
+        . == "3" ~ likert_levels[3],
+        . == "4" ~ likert_levels[4],
+        . == "5" ~ likert_levels[5]
+      )
+    )) %>%
+    dplyr::mutate(across(-Year, ~ factor(.x, levels = likert_levels))) %>%
+    dplyr::mutate_if(is.character, as.factor) %>%
+    dplyr::arrange(-desc(Year)) %>%
+    dplyr::mutate(Year = factor(Year, levels = years))
+  
+  v1 = df %>%
+    dplyr::mutate(id = row_number()) %>%
+    tidyr::pivot_longer(-c(id, Year), names_to = "group") %>%
+    tidyr::pivot_wider(names_from = Year) %>%
+    ggstats::gglikert(c(rev(unique(df$Year)))) +
+    scale_fill_manual(values = custom_colors) +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      strip.text = element_text(color = "black"),
+      axis.title = element_text(),
+      axis.text = element_text(),
+      axis.text.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(title = paste0("") , x = "")
+  
+  
+  
+  all_over2 =  all_over2 %>%
+    mutate(Year = factor(Year, levels = years))
+  
+  
+  
+  
+  all_over2 = all_over2 %>%
+    dplyr::mutate(Year = as.numeric(as.character(Year))) %>%
+    dplyr::arrange(desc(Year))
+  
+  
+  
+  v2 = data %>%
+    dplyr::select(Year) %>%
+    dplyr::mutate(Year = factor(Year)) %>%
+    dplyr::group_by(Year) %>%
+    dplyr::summarise(count = n()) %>%
+    ggplot2::ggplot(., aes(y = Year, x = count)) +
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = count), position = position_stack(vjust = .5)) +
+    theme_light() +
+    theme(
+      panel.border = element_rect(color = "gray"),
+      axis.text.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(y = NULL, x = NULL)
+  
+  
+  return(list(v1, v2))
+}
+
+grid_level_series = function(data, reason) {
+  
+  df = data %>%
+    select(Year, {{reason}}) %>%
+    group_by(Year, {{reason}}) %>%
+    summarise(n = n()) %>%
+    mutate(per = round(100 * n / sum(n), 0)) %>%
+    select(-n)
+  
+  all_years = sort(unique(data$Year))
+  
+  grid_plot = ggplot(df, aes(x = Year, y = per, group = {{reason}})) +
+    geom_line() +
+    geom_point() +  # Add points to the plot
+    ggrepel::geom_label_repel(
+      aes(label = paste0(round(per, 0), "%")),
+      # Add % symbol to the labels
+      size = 3,
+      # Adjust text size
+      box.padding = 0.3,
+      # Padding around text box
+      point.padding = 0.2,
+      # Padding around points
+      segment.color = "gray",
+      # Line color
+      segment.size = 0.5
+    ) +
+    facet_wrap(
+      vars({{reason}}),
+      scales = "free_y",
+     # nrow = 4,
+      ncol = 2,
+      strip.position = "top"
+    ) +
+    scale_x_continuous(breaks = all_years) +
+    theme(
+      strip.placement = "outside",
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank()
+    ) +
+    theme_bw() +
+    labs(y = NULL)
+  return(grid_plot)
+}
+
+grid_level_series_country = function(data,data_all,reason){
+
+  df = data%>%
+    select(Year,{{reason}})%>%
+    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    select(-c(questions))%>%
+    group_by(Year,reasons)%>%
+    summarise(n=n())%>%
+    mutate(per = round(100*n/sum(n),2)  )%>%
+    select(-n)
+  
+  dfccc = data_all%>%
+    select(Year,{{reason}})%>%
+    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    select(-c(questions))%>%
+    group_by(Year,reasons)%>%
+    summarise(n=n())%>%
+    mutate(per2 = round(100*n/sum(n),0)  )%>%
+    select(-n)
+  df = df%>%
+    left_join(.,dfccc,by=c("Year","reasons"))
+  
+  all_years = sort(unique(data$Year))
+  
+  
+  grid_plot_multi = ggplot(df, aes(x = Year)) +
+    geom_line(aes(y = per, group = reasons), color = "black") +  # Original line for `per`
+    geom_line(aes(y = per2, group = reasons), color = "#800080", linetype = "dotted") +  # New line for `per2`
+    geom_point(aes(y = per)) +  # Add points for `per`
+    geom_point(aes(y = per2), color = "#800080") +  # Add points for `per2`
+    ggrepel::geom_label_repel(aes(y = per, label = paste0(round(per, 0), "%")),  # Labels for `per`
+                              size = 3,                        # Adjust text size
+                              box.padding = 0.3,               # Padding around text box
+                              point.padding = 0.2,             # Padding around points
+                              segment.color = "gray",          # Line color
+                              segment.size = 0.5) +
+    ggrepel::geom_label_repel(aes(y = per2, label = paste0(round(per2, 0), "%")),  # Labels for `per2`
+                              size = 3,                        # Adjust text size
+                              box.padding = 0.3,               # Padding around text box
+                              point.padding = 0.2,             # Padding around points
+                              color = "#800080",
+                              segment.color = "#800080",        # Line color for per2 labels
+                              segment.size = 0.5) +
+    facet_wrap(vars(reasons), scales = "free_y",
+               #nrow = 4,
+               ncol = 2,
+               strip.position = "top") +
+    scale_x_continuous(breaks = all_years) + 
+    theme(
+      strip.placement = "outside",
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank()) +
+    theme_bw() +
+    labs(y = NULL)
+  
+  return(grid_plot_multi)
+  
+}
+
+grid_level_series_multi = function(data, reasons) {
+  
+  
+  df = data %>%
+    select(Year,all_of(reasons)) %>%
+    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    select(-c(questions))%>%
+    group_by(Year,reasons) %>%
+    summarise(n = n()) %>%
+    mutate(per = round(100 * n / sum(n), 0)) %>%
+    select(-n)
+  
+  all_years = sort(unique(data$Year))
+  
+  
+  grid_plot = ggplot(df, aes(x = Year, y = per, group = reasons)) +
+    geom_line() +
+    geom_point() +  # Add points to the plot
+    ggrepel::geom_label_repel(
+      aes(label = paste0(round(per, 0), "%")),
+      # Add % symbol to the labels
+      size = 3,
+      # Adjust text size
+      box.padding = 0.3,
+      # Padding around text box
+      point.padding = 0.2,
+      # Padding around points
+      segment.color = "gray",
+      # Line color
+      segment.size = 0.5
+    ) +
+    facet_wrap(
+      vars(reasons),
+      scales = "free_y",
+      # nrow = 4,
+      ncol = 2,
+      strip.position = "top"
+    ) +
+    scale_x_continuous(breaks = all_years) +
+    theme(
+      strip.placement = "outside",
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank()
+    ) +
+    theme_bw() +
+    labs(y = NULL)
+  return(grid_plot)
+}
+
+grid_level_series_multi_country = function(data,data_all,reasons){
+  
+  df = data%>%
+    select(Year,all_of(reasons))%>%
+    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    select(-c(questions))%>%
+    group_by(Year,reasons)%>%
+    summarise(n=n())%>%
+    mutate(per = round(100*n/sum(n),2)  )%>%
+    select(-n)
+  
+  dfccc = data_all%>%
+    select(Year,all_of(reasons))%>%
+    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    select(-c(questions))%>%
+    group_by(Year,reasons)%>%
+    summarise(n=n())%>%
+    mutate(per2 = round(100*n/sum(n),0)  )%>%
+    select(-n)
+  df = df%>%
+    left_join(.,dfccc,by=c("Year","reasons"))
+  
+  all_years = sort(unique(data$Year))
+  
+  
+  grid_plot_multi = ggplot(df, aes(x = Year)) +
+    geom_line(aes(y = per, group = reasons), color = "black") +  # Original line for `per`
+    geom_line(aes(y = per2, group = reasons), color = "#800080", linetype = "dotted") +  # New line for `per2`
+    geom_point(aes(y = per)) +  # Add points for `per`
+    geom_point(aes(y = per2), color = "#800080") +  # Add points for `per2`
+    ggrepel::geom_label_repel(aes(y = per, label = paste0(round(per, 0), "%")),  # Labels for `per`
+                              size = 3,                        # Adjust text size
+                              box.padding = 0.3,               # Padding around text box
+                              point.padding = 0.2,             # Padding around points
+                              segment.color = "gray",          # Line color
+                              segment.size = 0.5) +
+    ggrepel::geom_label_repel(aes(y = per2, label = paste0(round(per2, 0), "%")),  # Labels for `per2`
+                              size = 3,                        # Adjust text size
+                              box.padding = 0.3,               # Padding around text box
+                              point.padding = 0.2,             # Padding around points
+                              color = "#800080",
+                              segment.color = "#800080",        # Line color for per2 labels
+                              segment.size = 0.5) +
+    facet_wrap(vars(reasons), scales = "free_y",
+               #nrow = 4,
+               ncol = 2,
+               strip.position = "top") +
+    scale_x_continuous(breaks = all_years) + 
+    theme(
+      strip.placement = "outside",
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank()) +
+    theme_bw() +
+    labs(y = NULL)
+  
+  return(grid_plot_multi)
+  
+}
+
+table_function_elements = function(data_pivot, questions, year) {
+  
+  data_pivot = data_pivot%>%
+    tibble::as_tibble()
+  
+  custom_border = officer::fp_border(color = "black", width = 1)
+  
+  
+  df = data_pivot %>%
+    dplyr::select(Year, all_of(c("Question", "Response", "Favor"))) %>%
+    dplyr::filter(Year %in% year) %>%
+    dplyr::filter(Question %in% questions) %>%
+    dplyr::select(-c(Response, Year)) %>%
+    tidyr::drop_na() %>%
+    dplyr::group_by(Question, Favor) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::mutate(per = 100 * round(n / sum(n), 1)) %>%
+    dplyr::select(-n) %>%
+    dplyr::rename("Core Elements" = Question) %>%
+    tidyr::pivot_wider(names_from = Favor, values_from = per)
+  ft = flextable::flextable(df)
+  # Apply conditional formatting
+  for (col in names(df)) {
+    if (grepl("Unfavorable", col)) {
+      # Rows with "Unfavorable" > 30 (Red)
+      # ft = flextable::color(ft, i = which(df[[col]] > 30), j = col, color = "black")
+      ft = flextable::bg(ft,
+                         i = which(df[[col]] >= 30),
+                         j = col,
+                         bg = "#ed2e1c")
+      
+      # Rows with "Unfavorable" between 20 and 30 (Light red)
+      ft = flextable::bg(
+        ft,
+        i = which(df[[col]] >= 20 &
+                    df[[col]] < 30),
+        j = col,
+        bg = "#e09c95"
+      )
+    }
+    if (grepl("Neutral", col)) {
+      # Rows with "Neutral" > 30 (Blue)
+      #ft = flextable::color(ft, i = which(df[[col]] > 30), j = col, color = "black")
+      ft = flextable::bg(ft,
+                         i = which(df[[col]] >= 30),
+                         j = col,
+                         bg = "#85c1e9")
+    }
+    if (grepl("Favorable", col)) {
+      # Rows with "Favorable" > 75 (Green)
+      #  ft = flextable::color(ft, i = which(df[[col]] >= 75), j = col, color = "black")
+      ft = flextable::bg(ft,
+                         i = which(df[[col]] >= 75),
+                         j = col,
+                         bg = "#04B431")
+      
+      # Rows with "Good" between 65 and 75 (Light Green)
+      ft = flextable::bg(
+        ft,
+        i = which(df[[col]] > 65 &
+                    df[[col]] <= 75),
+        j = col,
+        bg = "#7FF98B"
+      )
+    }
+  }
+  ft = ft %>%
+    flextable::bg(i = 1, part = "header", bg = FACETBACKGROUND) %>%
+    flextable::border(part = "header",
+                      border = officer::fp_border(color = "black", width = 1)) %>%
+    flextable::hline(border = custom_border, part = "body") %>%  # Add horizontal lines between rows
+    flextable::vline(border = custom_border, part = "all") %>%  # Add vertical lines between columns
+    flextable::border_outer(part = "all", border = custom_border)
+  
+ 
+  
+  return(ft)
+}
+
+
+
+
+table_function_elements_camp = function(data,col1, questions, year,threshold,sorting) {
+  
+  
+  
+  filter_camp_df = data%>%
+    dplyr::filter(Year %in% year) %>%
+    dplyr::select({{ col1 }})%>%
+    dplyr::count( {{ col1 }})%>%
+    dplyr::filter( n >= threshold)%>%
+    dplyr::arrange(desc(n))
+  
+  parameters = as.vector(filter_camp_df[[1]])
+  
+  
+  custom_border = officer::fp_border(color = "black", width = 1)
+  
+  if(sorting == "worst"){
+    
+    df = data %>%
+      dplyr::filter(Year %in% year) %>%
+      dplyr::select(Year,{{ col1 }} ,all_of(questions))%>%
+      dplyr::filter({{ col1 }} %in%  parameters)%>%
+      tidyr::pivot_longer(!c(Year,{{ col1 }}), names_to = "Questions", values_to = "answers")%>%
+      dplyr::mutate(Favor = case_when(
+        answers %in% c(5, 4) ~ "Favorable",
+        answers == 3 ~ "Neutral",
+        answers %in% c(1, 2) ~ "Unfavorable",
+        TRUE ~ NA_character_
+      ))%>%
+      dplyr::select(-c(Questions,answers))%>%
+      tidyr::drop_na() %>%
+      dplyr::group_by({{ col1 }}, Favor) %>%
+      dplyr::summarise(n = n()) %>%
+      dplyr::mutate(per = 100 * round(n / sum(n), 1)) %>%
+      dplyr::select(-n)%>%
+      tidyr::pivot_wider(names_from = Favor, values_from = per)%>%
+      dplyr::mutate(across(where(is.double), ~replace(., is.na(.), 0)))%>%
+      dplyr::left_join(.,filter_camp_df,by = rlang::as_name(rlang::ensym(col1)))%>%
+      dplyr::rename(Count=n)%>%
+      dplyr::arrange(desc(Unfavorable)) %>%
+      dplyr::select(Camp_Name, Unfavorable, Neutral, Favorable, Count)
+    
+    ft = flextable::flextable(df)
+    
+    for (col in names(df)) {
+      if (grepl("Not provided", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      
+      if (grepl("Unfavorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      if (grepl("Neutral", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#85c1e9")
+      }
+      if (grepl("Favorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 75),
+                           j = col,
+                           bg = "#04B431")
+        ft = flextable::bg(ft,i = which(df[[col]] > 65 &df[[col]] <= 75),
+                           j = col,
+                           bg = "#7FF98B")
+      }
+    }
+    
+    
+    ft = ft %>%
+      flextable::bg(i = 1, part = "header", bg = FACETBACKGROUND) %>%
+      flextable::border(part = "header",
+                        border = officer::fp_border(color = "black", width = 1)) %>%
+      flextable::hline(border = custom_border, part = "body") %>%  # Add horizontal lines between rows
+      flextable::vline(border = custom_border, part = "all") %>%  # Add vertical lines between columns
+      flextable::border_outer(part = "all", border = custom_border)%>%
+      flextable::align(j = 2:ncol(df), align = "center", part = "all")%>%
+      flextable::autofit()
+    
+    return(ft)
+    
+  }else if(sorting == "best"){
+    
+    df = data %>%
+      dplyr::filter(Year %in% year) %>%
+      dplyr::select(Year,{{ col1 }} ,all_of(questions))%>%
+      dplyr::filter({{ col1 }} %in%  parameters)%>%
+      tidyr::pivot_longer(!c(Year,{{ col1 }}), names_to = "Questions", values_to = "answers")%>%
+      dplyr::mutate(Favor = case_when(
+        answers %in% c(5, 4) ~ "Favorable",
+        answers == 3 ~ "Neutral",
+        answers %in% c(1, 2) ~ "Unfavorable",
+        TRUE ~ NA_character_
+      ))%>%
+      dplyr::select(-c(Questions,answers))%>%
+      tidyr::drop_na() %>%
+      dplyr::group_by({{ col1 }}, Favor) %>%
+      dplyr::summarise(n = n()) %>%
+      dplyr::mutate(per = 100 * round(n / sum(n), 1)) %>%
+      dplyr::select(-n)%>%
+      tidyr::pivot_wider(names_from = Favor, values_from = per)%>%
+      dplyr::mutate(across(where(is.double), ~replace(., is.na(.), 0)))%>%
+      dplyr::left_join(.,filter_camp_df,by = rlang::as_name(rlang::ensym(col1)))%>%
+      dplyr::rename(Count=n)%>%
+      dplyr::arrange(desc(Favorable)) %>%
+      dplyr::select(Camp_Name, Unfavorable, Neutral, Favorable, Count)
+    
+    ft = flextable::flextable(df)
+    
+    for (col in names(df)) {
+      if (grepl("Not provided", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      
+      if (grepl("Unfavorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      if (grepl("Neutral", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#85c1e9")
+      }
+      if (grepl("Favorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 75),
+                           j = col,
+                           bg = "#04B431")
+        ft = flextable::bg(ft,i = which(df[[col]] > 65 &df[[col]] <= 75),
+                           j = col,
+                           bg = "#7FF98B")
+      }
+    }
+    
+    
+    ft = ft %>%
+      flextable::bg(i = 1, part = "header", bg = FACETBACKGROUND) %>%
+      flextable::border(part = "header",
+                        border = officer::fp_border(color = "black", width = 1)) %>%
+      flextable::hline(border = custom_border, part = "body") %>%  # Add horizontal lines between rows
+      flextable::vline(border = custom_border, part = "all") %>%  # Add vertical lines between columns
+      flextable::border_outer(part = "all", border = custom_border)%>%
+      flextable::align(j = 2:ncol(df), align = "center", part = "all")%>%
+      flextable::autofit()
+    
+    return(ft)
+    
+  }else if(sorting == "bar"){
+    
+    df = data %>%
+      dplyr::filter(Year %in% year) %>%
+      dplyr::select(Year,{{ col1 }} ,all_of(questions))%>%
+      dplyr::filter({{ col1 }} %in%  parameters)%>%
+      tidyr::pivot_longer(!c(Year,{{ col1 }}), names_to = "Questions", values_to = "answers")%>%
+      dplyr::mutate(Favor = case_when(
+        answers %in% c(5, 4) ~ "Favorable",
+        answers == 3 ~ "Neutral",
+        answers %in% c(1, 2) ~ "Unfavorable",
+        TRUE ~ NA_character_
+      ))%>%
+      dplyr::select(-c(Questions,answers))%>%
+      tidyr::drop_na() %>%
+      dplyr::group_by({{ col1 }}, Favor) %>%
+      dplyr::summarise(n = n()) %>%
+      dplyr::mutate(per = 100 * round(n / sum(n), 1)) %>%
+      dplyr::select(-n)%>%
+      tidyr::pivot_wider(names_from = Favor, values_from = per)%>%
+      dplyr::mutate(across(where(is.double), ~replace(., is.na(.), 0)))%>%
+      dplyr::left_join(.,filter_camp_df,by = rlang::as_name(rlang::ensym(col1)))%>%
+      dplyr::relocate(n,.after = Favorable)%>%
+      dplyr::rename(Count=n)%>%
+      dplyr::arrange(desc(Count))%>%
+      tibble::as_tibble() %>%
+      dplyr::select(Camp_Name, Unfavorable, Neutral, Favorable, Count)
+    
+    ft = flextable::flextable(df)
+    
+    for (col in names(df)) {
+      if (grepl("Not provided", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      
+      if (grepl("Unfavorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      if (grepl("Neutral", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#85c1e9")
+      }
+      if (grepl("Favorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 75),
+                           j = col,
+                           bg = "#04B431")
+        ft = flextable::bg(ft,i = which(df[[col]] > 65 &df[[col]] <= 75),
+                           j = col,
+                           bg = "#7FF98B")
+      }
+    }
+    
+    
+    ft = ft %>%
+      flextable::bg(i = 1, part = "header", bg = FACETBACKGROUND) %>%
+      flextable::border(part = "header",
+                        border = officer::fp_border(color = "black", width = 1)) %>%
+      flextable::hline(border = custom_border, part = "body") %>%  # Add horizontal lines between rows
+      flextable::vline(border = custom_border, part = "all") %>%  # Add vertical lines between columns
+      flextable::border_outer(part = "all", border = custom_border)%>%
+      flextable::align(j = 2:ncol(df), align = "center", part = "all")%>%
+      flextable::autofit()#%>%
+    
+    
+    return(ft)
+    
+  }
+  
+  
+  
+  
+}
+
+table_function_elements_camp_no_pro = function(data,col1, questions, year,threshold,sorting) {
+  
+  
+  
+  filter_camp_df = data%>%
+    dplyr::filter(Year %in% year) %>%
+    dplyr::select({{ col1 }})%>%
+    dplyr::count( {{ col1 }})%>%
+    dplyr::filter( n >= threshold)%>%
+    dplyr::arrange(desc(n))
+  
+  parameters = as.vector(filter_camp_df[[1]])
+  
+  
+  custom_border = officer::fp_border(color = "black", width = 1)
+  
+  if(sorting == "worst"){
+    
+    df = data %>%
+      dplyr::filter(Year %in% year) %>%
+      dplyr::select(Year,{{ col1 }} ,all_of(questions))%>%
+      dplyr::filter({{ col1 }} %in%  parameters)%>%
+      tidyr::pivot_longer(!c(Year,{{ col1 }}), names_to = "Questions", values_to = "answers")%>%
+      dplyr::mutate(Favor = case_when(
+        answers %in% c(5, 4) ~ "Favorable",
+        answers == 3 ~ "Neutral",
+        answers %in% c(1, 2) ~ "Unfavorable",
+        answers == 0 ~ "Not Provided",
+        TRUE ~ NA_character_
+      ))%>%
+      dplyr::select(-c(Questions,answers))%>%
+      tidyr::drop_na() %>%
+      dplyr::group_by({{ col1 }}, Favor) %>%
+      dplyr::summarise(n = n()) %>%
+      dplyr::mutate(per = 100 * round(n / sum(n), 1)) %>%
+      dplyr::select(-n)%>%
+      tidyr::pivot_wider(names_from = Favor, values_from = per)%>%
+      dplyr::mutate(across(where(is.double), ~replace(., is.na(.), 0)))%>%
+      dplyr::left_join(.,filter_camp_df,by = rlang::as_name(rlang::ensym(col1)))%>%
+      dplyr::rename(Count=n)%>%
+      dplyr::arrange(desc(Unfavorable)) %>%
+      dplyr::select(Camp_Name, Unfavorable, Neutral, Favorable, "Not Provided", Count)
+   
+     ft = flextable::flextable(df)
+    
+     for (col in names(df)) {
+      if (grepl("Not provided", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      
+      if (grepl("Unfavorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      if (grepl("Neutral", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#85c1e9")
+      }
+      if (grepl("Favorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 75),
+                           j = col,
+                           bg = "#04B431")
+        ft = flextable::bg(ft,i = which(df[[col]] > 65 &df[[col]] <= 75),
+                           j = col,
+                           bg = "#7FF98B")
+      }
+    }
+    
+    
+    ft = ft %>%
+      flextable::bg(i = 1, part = "header", bg = FACETBACKGROUND) %>%
+      flextable::border(part = "header",
+                        border = officer::fp_border(color = "black", width = 1)) %>%
+      flextable::hline(border = custom_border, part = "body") %>%  # Add horizontal lines between rows
+      flextable::vline(border = custom_border, part = "all") %>%  # Add vertical lines between columns
+      flextable::border_outer(part = "all", border = custom_border)%>%
+      flextable::align(j = 2:ncol(df), align = "center", part = "all")%>%
+      flextable::autofit()
+    
+    return(ft)
+    
+  }else if(sorting == "best"){
+    
+    df = data %>%
+      dplyr::filter(Year %in% year) %>%
+      dplyr::select(Year,{{ col1 }} ,all_of(questions))%>%
+      dplyr::filter({{ col1 }} %in%  parameters)%>%
+      tidyr::pivot_longer(!c(Year,{{ col1 }}), names_to = "Questions", values_to = "answers")%>%
+      dplyr::mutate(Favor = case_when(
+        answers %in% c(5, 4) ~ "Favorable",
+        answers == 3 ~ "Neutral",
+        answers %in% c(1, 2) ~ "Unfavorable",
+        answers == 0 ~ "Not Provided",
+        TRUE ~ NA_character_
+      ))%>%
+      dplyr::select(-c(Questions,answers))%>%
+      tidyr::drop_na() %>%
+      dplyr::group_by({{ col1 }}, Favor) %>%
+      dplyr::summarise(n = n()) %>%
+      dplyr::mutate(per = 100 * round(n / sum(n), 1)) %>%
+      dplyr::select(-n)%>%
+      tidyr::pivot_wider(names_from = Favor, values_from = per)%>%
+      dplyr::mutate(across(where(is.double), ~replace(., is.na(.), 0)))%>%
+      dplyr::left_join(.,filter_camp_df,by = rlang::as_name(rlang::ensym(col1)))%>%
+      dplyr::rename(Count=n)%>%
+      dplyr::arrange(desc(Favorable)) %>%
+      dplyr::select(Camp_Name, Unfavorable, Neutral, Favorable, "Not Provided", Count)
+    
+    ft = flextable::flextable(df)
+    
+    for (col in names(df)) {
+      if (grepl("Not provided", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      
+      if (grepl("Unfavorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      if (grepl("Neutral", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#85c1e9")
+      }
+      if (grepl("Favorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 75),
+                           j = col,
+                           bg = "#04B431")
+        ft = flextable::bg(ft,i = which(df[[col]] > 65 &df[[col]] <= 75),
+                           j = col,
+                           bg = "#7FF98B")
+      }
+    }
+    
+    
+    ft = ft %>%
+      flextable::bg(i = 1, part = "header", bg = FACETBACKGROUND) %>%
+      flextable::border(part = "header",
+                        border = officer::fp_border(color = "black", width = 1)) %>%
+      flextable::hline(border = custom_border, part = "body") %>%  # Add horizontal lines between rows
+      flextable::vline(border = custom_border, part = "all") %>%  # Add vertical lines between columns
+      flextable::border_outer(part = "all", border = custom_border)%>%
+      flextable::align(j = 2:ncol(df), align = "center", part = "all")%>%
+      flextable::autofit()
+    
+    return(ft)
+    
+  }else if(sorting == "bar"){
+    
+    df = data %>%
+      dplyr::filter(Year %in% year) %>%
+      dplyr::select(Year,{{ col1 }} ,all_of(questions))%>%
+      dplyr::filter({{ col1 }} %in%  parameters)%>%
+      tidyr::pivot_longer(!c(Year,{{ col1 }}), names_to = "Questions", values_to = "answers")%>%
+      dplyr::mutate(Favor = case_when(
+        answers %in% c(5, 4) ~ "Favorable",
+        answers == 3 ~ "Neutral",
+        answers %in% c(1, 2) ~ "Unfavorable",
+        answers == 0 ~ "Not Provided",
+        TRUE ~ NA_character_
+      ))%>%
+      dplyr::select(-c(Questions,answers))%>%
+      tidyr::drop_na() %>%
+      dplyr::group_by({{ col1 }}, Favor) %>%
+      dplyr::summarise(n = n()) %>%
+      dplyr::mutate(per = 100 * round(n / sum(n), 1)) %>%
+      dplyr::select(-n)%>%
+      tidyr::pivot_wider(names_from = Favor, values_from = per)%>%
+      dplyr::mutate(across(where(is.double), ~replace(., is.na(.), 0)))%>%
+      dplyr::left_join(.,filter_camp_df,by = rlang::as_name(rlang::ensym(col1)))%>%
+      dplyr::relocate(n,.after = Favorable)%>%
+      dplyr::rename(Count=n)%>%
+      dplyr::arrange(desc(Count))%>%
+      tibble::as_tibble() %>%
+      dplyr::select(Camp_Name, Unfavorable, Neutral, Favorable, "Not Provided", Count)
+    
+    ft = flextable::flextable(df)
+  
+    for (col in names(df)) {
+      if (grepl("Not provided", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      
+      if (grepl("Unfavorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#ed2e1c")
+        ft = flextable::bg(
+          ft,
+          i = which(df[[col]] >= 20 &
+                      df[[col]] < 30),
+          j = col,
+          bg = "#e09c95"
+        )
+      }
+      if (grepl("Neutral", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 30),
+                           j = col,
+                           bg = "#85c1e9")
+      }
+      if (grepl("Favorable", col)) {
+        ft = flextable::bg(ft,
+                           i = which(df[[col]] >= 75),
+                           j = col,
+                           bg = "#04B431")
+        ft = flextable::bg(ft,i = which(df[[col]] > 65 &df[[col]] <= 75),
+                           j = col,
+                           bg = "#7FF98B")
+      }
+    }
+    
+    
+    ft = ft %>%
+      flextable::bg(i = 1, part = "header", bg = FACETBACKGROUND) %>%
+      flextable::border(part = "header",
+                        border = officer::fp_border(color = "black", width = 1)) %>%
+      flextable::hline(border = custom_border, part = "body") %>%  # Add horizontal lines between rows
+      flextable::vline(border = custom_border, part = "all") %>%  # Add vertical lines between columns
+      flextable::border_outer(part = "all", border = custom_border)%>%
+      flextable::align(j = 2:ncol(df), align = "center", part = "all")%>%
+      flextable::autofit()#%>%
+  
+    
+    return(ft)
+    
+  }
+  
+  
+  
+  
+}
+
+wellness_scorecard = function(DataFrame){
+  
+  
+  DataFrame = DataFrame%>%
+    dplyr::filter(Year == YEAR)
+  
+  
+  bmi_report = DataFrame%>%
+    select(BMI)%>%
+    mutate(bmi = case_when(BMI >= 18.5 & BMI < 25 ~"withintarget",
+                           TRUE ~ "outoftarget"))%>%
+    select(bmi)%>%
+    group_by(bmi)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))%>%
+    filter(bmi=="withintarget")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  smokers_percentage = DataFrame%>%
+    select(Smoke)%>%
+    mutate(Smoke = case_when(Smoke == "I smoke narghileh" ~ "Yes",
+                             TRUE ~ Smoke))%>%
+    group_by(Smoke)%>%
+    summarise(n=n())%>%
+    mutate(per = 100* (n/sum(n))    )%>%
+    select(-n)%>%
+    filter(Smoke=="Yes")%>%
+    select(per)%>%
+    as.numeric()%>%
+    round(.,0)  
+  
+  
+  
+  exercise_report = DataFrame%>%
+    filter(Year ==YEAR)%>%
+    select(Exercise)%>%
+    mutate(Exercise = case_when(Exercise  >= 2.5 ~ "Above to 2.5 hours",
+                                TRUE ~ "below to 2.5 hours"))%>%
+    group_by(Exercise)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))%>%
+    filter(str_starts(tolower(Exercise), "above"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  s1 = DataFrame%>%
+    filter(Year ==YEAR)%>%
+    select(Stress_Level)%>%
+    group_by(Stress_Level)%>%
+    summarise(n=n())%>%
+    mutate(per = n/sum(n))%>%
+    select(-n)
+  
+  
+  stress_quantity = s1%>%
+    filter(str_starts(tolower(Stress_Level), "no"))%>%
+    mutate(stress_quant = 100*(1-per))%>%
+    select(stress_quant)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  very_stress = s1%>%
+    filter(Stress_Level %in% c("Unbearable stress","Severe stress"))%>%
+    summarise(very_stress = 100*sum(per))%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  work_hours_project = DataFrame%>%
+    select(Working_Hours,WorkLocationType)%>%
+    filter(Working_Hours >=5)%>%
+    mutate(Working_Hours = case_when(Working_Hours >55 ~ "ABOVE 55 hrs",
+                                     TRUE ~ "BELOW 55 hrs"))%>%
+    filter(WorkLocationType == "Project")%>%
+    group_by(Working_Hours)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))
+  
+  work_hours_project_no_target = work_hours_project%>%
+    filter(str_starts(tolower(Working_Hours), "above"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  
+  work_hours_project_target = work_hours_project%>%
+    filter(str_starts(tolower(Working_Hours), "below"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  work_hours_office = DataFrame%>%
+    select(Working_Hours,WorkLocationType)%>%
+    mutate(Working_Hours = case_when(Working_Hours >55 ~ "ABOVE 55 hrs",
+                                     TRUE ~ "BELOW 55 hrs"))%>%
+    filter(WorkLocationType != "Project")%>%
+    group_by(Working_Hours)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))
+  
+  work_hours_office_no_target = work_hours_office%>%
+    filter(str_starts(tolower(Working_Hours), "above"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric
+  
+  
+  
+  work_hours_office_target = work_hours_office%>%
+    filter(str_starts(tolower(Working_Hours), "below"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  charity = DataFrame%>%
+    filter(Year == YEAR)%>%
+    select(Charity_Work_Hours)%>%
+    mutate(Ch = case_when(Charity_Work_Hours == 0 ~ "no",
+                          Charity_Work_Hours >= 1 & Charity_Work_Hours <=20 ~ "1-20",
+                          Charity_Work_Hours > 20~ "above"))%>%
+    select(Ch)%>%
+    group_by(Ch)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))
+  
+  above_20 = charity%>%
+    filter(Ch == "above")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  charity_1_20 = charity%>%
+    filter(Ch == "1-20")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  no_charity = charity%>%
+    filter(Ch == "no")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  Received_wellness = DataFrame%>%
+    filter(WorkLocationType == "Project")%>%
+    select(Has_Attended_Welleness_Training)%>%
+    group_by(Has_Attended_Welleness_Training)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n /sum(n))%>%
+    select(-n)%>%
+    filter(Has_Attended_Welleness_Training =="Yes")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  Atleast1_training = DataFrame%>%
+    filter(WorkLocationType == "Project")%>%
+    select(Has_Attended_Welleness_Training,Count_Of_Wellness_Trainings_Attended)%>%
+    filter(Has_Attended_Welleness_Training == "Yes")%>%
+    mutate(HowMany_wellness_training = case_when(Count_Of_Wellness_Trainings_Attended == 1 ~ "Atleast1",
+                                                 TRUE ~ "mORE_THAN_1"))%>%
+    select(-Count_Of_Wellness_Trainings_Attended)%>%
+    group_by(HowMany_wellness_training)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n /sum(n))%>%
+    select(-n)%>%
+    filter(HowMany_wellness_training=="Atleast1")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  Twoormore  = 100 - Atleast1_training
+  
+  
+  
+  noWellness_Diet_Offered_At_Camp=DataFrame%>%
+    select(Wellness_Diet_Offered_At_Camp)%>%
+    filter(Wellness_Diet_Offered_At_Camp != "My food is not provided by CCC")%>%
+    group_by(Wellness_Diet_Offered_At_Camp)%>%
+    summarise(n=n())%>%
+    mutate(per=100*n/sum(n))%>%
+    select(-n)%>%
+    filter(Wellness_Diet_Offered_At_Camp=="No")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  yesWellness_Diet_Offered_At_Camp=DataFrame%>%
+    select(Wellness_Diet_Offered_At_Camp)%>%
+    filter(Wellness_Diet_Offered_At_Camp != "My food is not provided by CCC")%>%
+    group_by(Wellness_Diet_Offered_At_Camp)%>%
+    summarise(n=n())%>%
+    mutate(per=100*n/sum(n))%>%
+    select(-n)%>%
+    filter(Wellness_Diet_Offered_At_Camp=="Yes")%>%
+    ungroup()%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  idnkWellness_Diet_Offered_At_Camp=DataFrame%>%
+    select(Wellness_Diet_Offered_At_Camp)%>%
+    filter(Wellness_Diet_Offered_At_Camp != "My food is not provided by CCC")%>%
+    group_by(Wellness_Diet_Offered_At_Camp)%>%
+    summarise(n=n())%>%
+    mutate(per=100*n/sum(n))%>%
+    select(-n)%>%
+    filter(Wellness_Diet_Offered_At_Camp=="I do not know")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  
+  fruit_camp = DataFrame%>%
+    select(Camp_Lunch_Box)%>%
+    filter(Camp_Lunch_Box != "My food is not provided by CCC")%>%
+    group_by(Camp_Lunch_Box)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n /sum(n))%>%
+    filter(Camp_Lunch_Box == "Yes")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  sugar_test_above_30 = DataFrame%>%
+    select(Diabetes_Test,Age_Range)%>%
+    mutate(Agecat = case_when(Age_Range %in% c("26-30","20-25","Below 20") ~ "below_30",
+                              TRUE ~ "above_30"))%>%
+    select(-Age_Range)%>%
+    group_by(Agecat,Diabetes_Test)%>%
+    summarise(n=n())%>%
+    mutate(per = 100* n/sum(n))%>%
+    filter(Agecat == "above_30")%>%
+    filter(Diabetes_Test=="Yes")%>%
+    ungroup%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  chole_35 = DataFrame%>%
+    select(Cholesterol_Test,Age_Range)%>%
+    mutate(Agecat = case_when(Age_Range %in% c("26-30","20-25","Below 20","31-35") ~ "below_30C",
+                              TRUE ~ "above_35C"))%>%
+    select(-Age_Range)%>%
+    group_by(Agecat,Cholesterol_Test)%>%
+    summarise(n=n())%>%
+    mutate(per = 100* n/sum(n))%>%
+    filter(Agecat == "above_35C")%>%
+    filter(Cholesterol_Test=="Yes")%>%
+    ungroup%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  drink_water = DataFrame%>%
+    filter(Water_Litres<=10)%>%
+    select(Water_Litres)%>%
+    mutate(Water = case_when(Water_Litres >=2 ~ "good",
+                             TRUE ~ "NOGOOD"))%>%
+    group_by(Water)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))%>%
+    filter(str_starts(tolower(Water), "good"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  source = c(bmi_report,
+             smokers_percentage,
+             exercise_report,
+             stress_quantity,
+             very_stress,
+             work_hours_project_target,
+             work_hours_project_no_target,
+             work_hours_office_target ,
+             work_hours_office_no_target,
+             above_20,
+             charity_1_20,
+             no_charity,
+             Received_wellness ,
+             Atleast1_training,
+             Twoormore,
+             
+             yesWellness_Diet_Offered_At_Camp,
+             idnkWellness_Diet_Offered_At_Camp,
+             noWellness_Diet_Offered_At_Camp, 
+             fruit_camp,
+             sugar_test_above_30,
+             chole_35,
+             drink_water )
+  
+  source[is.na(source)] = 0
+  # Creating the tibble
+  health_factors = tibble(
+    Factor = c(
+      "BMI Index",
+      "Smoking",
+      "Physical Activity",
+      "Stress",
+      "Stress",
+      "Working Hours \n (in projects)",
+      "Working Hours \n (in projects)",
+      "Working Hours \n (in Area offices)",
+      "Working Hours \n (in Area offices)",
+      "Volunteering \n to Charity",
+      "Volunteering \n to Charity",
+      "Volunteering \n to Charity",
+      "Wellness Seminars",
+      "Wellness Seminars",
+      "Wellness Seminars",
+      "Wellness Diet at Camps",
+      "Wellness Diet at Camps",
+      "Wellness Diet at Camps",
+      "Free Fruits per day",
+      "Cumulative \n Sugar Test",
+      "Cholesterol \n LDL Level",
+      "Drinking Water"
+    ),
+    CCC_Target = c(
+      "18.5 ≤ BMI < 25",
+      "Smokers less than 10%",
+      "Minimum 150 min/week",
+      "",
+      "",
+      "Maximum 55 Hours/Week",
+      "Maximum 55 Hours/Week",
+      "Maximum 55 Hours/ Week",
+      "Maximum 55 Hours/ Week",
+      "20 hours Charity \n Work (Of working hours)",
+      "20 hours Charity \n Work (Of working hours)",
+      "20 hours Charity \n Work (Of working hours)",
+      "At least Twice a year \n on project training",
+      "At least Twice a year \n on project training",
+      "At least Twice a year \n on project training",
+      "Must be available",
+      "Must be available",
+      "Must be available",
+      "Lunch box must contain fruit",
+      "100% of Individuals above 30 \n years/ check once per year",
+      "100% of Individuals above 35 \n years/ check once per year",
+      ">= 2 Liters/day"
+    ),
+    Actual_Results = c(
+      paste(source[1], "% Within normal range"),
+      paste(source[2], "% Are smokers"),
+      paste(source[3], "% Exercise 150 min week or more"),
+      paste(source[4], "% Reported various levels of stress"),
+      paste(source[5], "% of which reported Severe \n and Unbearable Stress levels"),
+      paste(source[6], "% Headcount within target"),
+      paste(source[7], "% Headcount not within target"),
+      paste(source[8], "% Headcount reported working up to 55 Hours/Week"),
+      paste(source[9], "% Headcount reported working more than 55 Hours/Week"),
+      paste(source[10],"% did above 20 hours of charity work"),
+      paste(source[11],"% did 1 to 20 hours of charity work"),
+      paste(source[12],"% didn’t do any charity work last year"),
+      paste("Only",source[13],"% of respondents received \n Wellness Training last year","\n Of those who received Wellness Training:"),
+      paste(source[14],"% received only 1 seminar"),
+      paste(source[15],"% received 2 or more"),
+      paste(source[16],"% said there is a wellness diet \n at camp mess"),
+      paste(source[17],"% said they are not aware of any \n Wellness Diet at their camp mess"),
+      paste(source[18],"% said no such Diet is available \n at their camp mess"),
+      paste(source[19],"% (of those who receive their \n food from CCC) receive a fruit"),    
+      paste(source[20],"% of those above 30 checked \n their sugar levels in the past year"),
+      paste(source[21],"% of those above 35 checked \n their cholesterol levels in the past year"),
+      paste(source[22],"% Headcount")
+    )
+  )%>%
+    dplyr::rename("Actual Results" = "Actual_Results",
+                  "CCC Target"     = "CCC_Target",
+                  "Factor" ="Factor")
+  
+  
+  digits  = 1 
+  
+  custom_border = officer::fp_border(color = "black", width = 1)
+  
+  
+  wellness_score = health_factors%>%
+    flextable::flextable()%>%
+    flextable::height(height = 0.5, part = "header") %>%
+    flextable::hrule(i = 1, rule = "exact", part = "header")%>%
+    flextable::align(part = "header", align = "justify") %>%
+    flextable::width(j = 1, width = 2) %>%   
+    flextable::width(j = 2, width = 2) %>%   
+    flextable::width(j = 3, width = 4) %>%   
+    flextable::bold(part = "header")  %>%   
+    flextable::align(j = 1:ncol(health_factors), align = "center", part = "all") %>%
+    flextable::align(j = 3, align = "left", part = "all") %>%
+    flextable::bold(part = "body") %>%  
+    flextable::border_outer(part = "all", border = custom_border) %>%  
+    flextable::bg(i = 1, j = 1:ncol(health_factors), bg = "#0070C0", part = "header") %>% 
+    flextable::color(i = 1, j = 1:ncol(health_factors), color = "white", part = "header") %>%  
+    flextable::bg(i = 1:nrow(health_factors), j = 1, bg = "#0070C0", part = "body") %>%  
+    flextable::color(i = 1:nrow(health_factors), j = 1, color = "white", part = "body")%>%
+    flextable::bg(i = seq(2, nrow(health_factors), by = 2), j = 2:ncol(health_factors), bg = "#F2F2F2", part = "body") %>%  
+    flextable::bg(i = seq(1, nrow(health_factors), by = 2), j = 2:ncol(health_factors), bg = "#E6E6FA", part = "body")  %>%
+    flextable::bg(i = 4:5,   j = 2:ncol(health_factors), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 6:7,   j = 2:ncol(health_factors), bg = "#E6E6FA", part = "body") %>%
+    flextable::bg(i = 8:9,   j = 2:ncol(health_factors), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 10:12, j = 2:ncol(health_factors), bg = "#E6E6FA", part = "body") %>%
+    flextable::bg(i = 13:15, j = 2:ncol(health_factors), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 16:18, j = 2:ncol(health_factors), bg = "#E6E6FA", part = "body") %>%
+    flextable::bg(i = 19,    j = 2:ncol(health_factors), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 20,    j = 2:ncol(health_factors), bg = "#E6E6FA", part = "body") %>%
+    flextable::bg(i = 21,    j = 2:ncol(health_factors), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 22,    j = 2:ncol(health_factors), bg = "#E6E6FA", part = "body") %>%
+    flextable::align(part = "header", align = "center")%>%
+    flextable::merge_at(i = 4:5, j = 1)%>%
+    flextable::merge_at(i = 4:5, j = 2)%>%
+    flextable::merge_at(i = 6:7, j = 1)%>%
+    flextable::merge_at(i = 6:7, j = 2)%>%
+    flextable::merge_at(i = 8:9, j = 1)%>%
+    flextable::merge_at(i = 8:9, j = 2)%>%
+    flextable::merge_at(i = 10:12, j = 1)%>%
+    flextable::merge_at(i = 10:12, j = 2)%>%
+    flextable::merge_at(i = 13:15, j = 1)%>%
+    flextable::merge_at(i = 13:15, j = 2)%>%
+    flextable::merge_at(i = 16:18, j = 1)%>%
+    flextable::merge_at(i = 16:18, j = 2)%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 1,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[1]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Within normal range")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 2,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[2]), 
+                                            color = if (source[2] < 10)
+                                              "#04B431"
+                                            else
+                                              "#ed2e1c"),
+                        flextable::as_chunk(" Are smokers")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 3,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[3]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Exercise 150 min week or more")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 4,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[4]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" Reported various levels of stress")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 5,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[5]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" of which reported \n Severe and Unbearable Stress levels")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 6,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[6]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Headcount within target")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 7,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[7]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" Headcount not within target")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 8,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[8]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Headcount within target")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 9,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[9]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" Headcount not within target")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 10,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[10]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" did above 20 hours of charity work")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i =11,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[11]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" did 1 to 20 hours of charity work")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 12,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[12]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" didn’t do any charity work last year")
+                      ))%>%
+    flextable::mk_par(
+      j = "Actual Results",
+      i = 13,
+      value = flextable::as_paragraph(
+        flextable::as_chunk("Only ", props = officer::fp_text(color = "black",bold = TRUE,font.size = 11)), 
+        flextable::colorize(sprintf("%.0f%%", source[13]), color = "#ed2e1c"),
+        flextable::as_chunk(" of respondents received Wellness \n Training last year. Of those who received Wellness Training:")
+      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 14,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf(" - %.0f%%", source[14]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" received only 1 seminar")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 15,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf(" - %.0f%%", source[15]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" received 2 or more")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 16,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[16]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" said there is a wellness \n diet at camp mess")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 17,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[17]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" said they are not aware of \n any Wellness Diet at their camp mess")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 18,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[18]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" said no such Diet \n is available at their camp mess")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 19,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[19]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" (of those who receive their \n food from CCC) receive a fruit")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 20,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%% of those above 30 checked", source[20]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" \n their sugar levels in the past year")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 21,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%% of those above 35 checked", source[21]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" \n their cholesterol levels in the past year")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 22,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[22]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Headcount")
+                      ))%>%
+    flextable::vline(j = 1:ncol(health_factors),
+                     border = officer::fp_border(color = "black", width = 1), part = "all")%>%
+    flextable::border(i = 2 , j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 3 , j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 4 , j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 6 , j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 8, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 10, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 13, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 16, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 19, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 20, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 21, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")%>%
+    flextable::border(i = 22, j = 1:ncol(health_factors),
+                      border.top = officer::fp_border(color = "black", width = 1), part = "body")
+  return(wellness_score)
+  
+}
+
+wellness_scorecard_office = function(DataFrame){
+  
+  
+  DataFrame = DataFrame%>%
+    dplyr::filter(Year == YEAR)
+  
+  
+  bmi_report = DataFrame%>%
+    select(BMI)%>%
+    mutate(bmi = case_when(BMI >= 18.5 & BMI < 25 ~"withintarget",
+                           TRUE ~ "outoftarget"))%>%
+    select(bmi)%>%
+    group_by(bmi)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))%>%
+    filter(bmi=="withintarget")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  smokers_percentage = DataFrame%>%
+    select(Smoke)%>%
+    mutate(Smoke = case_when(Smoke == "I smoke narghileh" ~ "Yes",
+                             TRUE ~ Smoke))%>%
+    group_by(Smoke)%>%
+    summarise(n=n())%>%
+    mutate(per = 100* (n/sum(n))    )%>%
+    select(-n)%>%
+    filter(Smoke=="Yes")%>%
+    select(per)%>%
+    as.numeric()%>%
+    round(.,0)  
+  
+  
+  
+  exercise_report = DataFrame%>%
+    filter(Year ==YEAR)%>%
+    select(Exercise)%>%
+    mutate(Exercise = case_when(Exercise  >= 2.5 ~ "Above to 2.5 hours",
+                                TRUE ~ "below to 2.5 hours"))%>%
+    group_by(Exercise)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))%>%
+    filter(str_starts(tolower(Exercise), "above"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  s1 = DataFrame%>%
+    filter(Year ==YEAR)%>%
+    select(Stress_Level)%>%
+    group_by(Stress_Level)%>%
+    summarise(n=n())%>%
+    mutate(per = n/sum(n))%>%
+    select(-n)
+  
+  
+  stress_quantity = s1%>%
+    filter(str_starts(tolower(Stress_Level), "no"))%>%
+    mutate(stress_quant = 100*(1-per))%>%
+    select(stress_quant)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  very_stress = s1%>%
+    filter(Stress_Level %in% c("Unbearable stress","Severe stress"))%>%
+    summarise(very_stress = 100*sum(per))%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  work_hours_office = DataFrame%>%
+    select(Working_Hours,WorkLocationType)%>%
+    mutate(Working_Hours = case_when(Working_Hours >55 ~ "ABOVE 55 hrs",
+                                     TRUE ~ "BELOW 55 hrs"))%>%
+    filter(WorkLocationType != "Project")%>%
+    group_by(Working_Hours)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))
+  
+  work_hours_office_no_target = work_hours_office%>%
+    filter(str_starts(tolower(Working_Hours), "above"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric
+  
+  
+  
+  work_hours_office_target = work_hours_office%>%
+    filter(str_starts(tolower(Working_Hours), "below"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  charity = DataFrame%>%
+    select(Charity_Work_Hours)%>%
+    mutate(Ch = case_when(Charity_Work_Hours == 0 ~ "no",
+                          Charity_Work_Hours >= 1 & Charity_Work_Hours <=20 ~ "1-20",
+                          Charity_Work_Hours > 20~ "above"))%>%
+    select(Ch)%>%
+    group_by(Ch)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))
+  
+  above_20 = charity%>%
+    filter(Ch == "above")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  charity_1_20 = charity%>%
+    filter(Ch == "1-20")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  no_charity = charity%>%
+    filter(Ch == "no")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  Received_wellness = DataFrame%>%
+    select(Has_Attended_Welleness_Training)%>%
+    group_by(Has_Attended_Welleness_Training)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n /sum(n))%>%
+    select(-n)%>%
+    filter(Has_Attended_Welleness_Training =="Yes")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  
+  Atleast1_training = DataFrame%>%
+    select(Has_Attended_Welleness_Training,Count_Of_Wellness_Trainings_Attended)%>%
+    filter(Has_Attended_Welleness_Training == "Yes")%>%
+    mutate(HowMany_wellness_training = case_when(Count_Of_Wellness_Trainings_Attended == 1 ~ "Atleast1",
+                                                 TRUE ~ "mORE_THAN_1"))%>%
+    select(-Count_Of_Wellness_Trainings_Attended)%>%
+    group_by(HowMany_wellness_training)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n /sum(n))%>%
+    select(-n)%>%
+    filter(HowMany_wellness_training=="Atleast1")%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  Twoormore  = 100 - Atleast1_training
+  
+  
+  
+  
+  
+  
+  
+  sugar_test_above_30 = DataFrame%>%
+    select(Diabetes_Test,Age_Range)%>%
+    mutate(Agecat = case_when(Age_Range %in% c("26-30","20-25","Below 20") ~ "below_30",
+                              TRUE ~ "above_30"))%>%
+    select(-Age_Range)%>%
+    group_by(Agecat,Diabetes_Test)%>%
+    summarise(n=n())%>%
+    mutate(per = 100* n/sum(n))%>%
+    filter(Agecat == "above_30")%>%
+    filter(Diabetes_Test=="Yes")%>%
+    ungroup%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  chole_35 = DataFrame%>%
+    select(Cholesterol_Test,Age_Range)%>%
+    mutate(Agecat = case_when(Age_Range %in% c("26-30","20-25","Below 20","31-35") ~ "below_30C",
+                              TRUE ~ "above_35C"))%>%
+    select(-Age_Range)%>%
+    group_by(Agecat,Cholesterol_Test)%>%
+    summarise(n=n())%>%
+    mutate(per = 100* n/sum(n))%>%
+    filter(Agecat == "above_35C")%>%
+    filter(Cholesterol_Test=="Yes")%>%
+    ungroup%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  
+  drink_water = DataFrame%>%
+    filter(Water_Litres<=10)%>%
+    select(Water_Litres)%>%
+    mutate(Water = case_when(Water_Litres >=2 ~ "good",
+                             TRUE ~ "NOGOOD"))%>%
+    group_by(Water)%>%
+    summarise(n=n())%>%
+    mutate(per = 100*n/sum(n))%>%
+    filter(str_starts(tolower(Water), "good"))%>%
+    select(per)%>%
+    round(.,0)%>%
+    as.numeric()
+  
+  source = c(bmi_report,
+             smokers_percentage,
+             exercise_report,
+             stress_quantity,
+             very_stress,
+             
+             work_hours_office_target ,
+             work_hours_office_no_target,
+             
+             above_20,
+             charity_1_20,
+             no_charity,
+             
+             Received_wellness ,
+             Atleast1_training,
+             Twoormore,
+             
+             sugar_test_above_30,
+             chole_35,
+             drink_water )
+  
+  source[is.na(source)] = 0
+  # Creating the tibble
+  health_factors_office = tibble(
+    Factor = c(
+      "BMI Index",
+      "Smoking",
+      "Physical Activity",
+      "Stress",
+      "Stress",
+      
+      "Working Hours \n (in Area offices)",
+      "Working Hours \n (in Area offices)",
+      "Volunteering \n to Charity",
+      "Volunteering \n to Charity",
+      "Volunteering \n to Charity",
+      "Wellness Seminars",
+      "Wellness Seminars",
+      "Wellness Seminars",
+      
+      "Cumulative \n Sugar Test",
+      "Cholesterol \n LDL Level",
+      "Drinking Water"
+    ),
+    CCC_Target = c(
+      "18.5 ≤ BMI < 25",
+      "Smokers less than 10%",
+      "Minimum 150 min/week",
+      "",
+      "",
+      
+      "Maximum 55 Hours/ Week",
+      "Maximum 55 Hours/ Week",
+      "20 hours Charity Work (Of working hours)",
+      "20 hours Charity Work (Of working hours)",
+      "20 hours Charity Work (Of working hours)",
+      "At least Twice a year on project training",
+      "At least Twice a year on project training",
+      "At least Twice a year on project training",
+      
+      
+      "100% of Individuals above 30 years/ check once per year",
+      "100% of Individuals above 35 years/ check once per year",
+      ">= 2 Liters/day"
+    ),
+    Actual_Results = c(
+      paste(source[1], "% Within normal range"),
+      paste(source[2], "% Are smokers"),
+      paste(source[3], "% Exercise 150 min week or more"),
+      paste(source[4], "% Reported various levels of stress"),
+      paste(source[5], "% of which reported Severe and Unbearable Stress levels"),
+      
+      paste(source[6], "% Headcount reported working up to 55 Hours/Week"),
+      paste(source[7], "% Headcount reported working more than 55 Hours/Week"),
+      paste(source[8],"% did above 20 hours of charity work"),
+      paste(source[9],"% did 1 to 20 hours of charity work"),
+      paste(source[10],"% didn’t do any charity work last year"),
+      paste("Only",source[11],"% of respondents received Wellness Training last year","\n Of those who received Wellness Training:"),
+      paste(source[12],"% received only 1 seminar"),
+      paste(source[13],"% received 2 or more"),
+      
+      paste(source[14],"% of those above 30 checked their sugar levels in the past year"),
+      paste(source[15],"% of those above 35 checked their cholesterol levels in the past year"),
+      paste(source[16],"% Headcount")
+    )
+  )%>%
+    dplyr::rename("Actual Results" = "Actual_Results",
+                  "CCC Target"     = "CCC_Target",
+                  "Factor" ="Factor")
+  
+  
+  digits  = 1 
+  
+  custom_border = officer::fp_border(color = "black", width = 1)
+  
+  
+  wellness_score_office = health_factors_office%>%
+    flextable::flextable()%>%
+    flextable::height(height = 0.5, part = "header") %>%
+    flextable::hrule(i = 1, rule = "exact", part = "header")%>%
+    flextable::align(part = "header", align = "justify") %>%
+    flextable::width(j = 1, width = 2) %>%   
+    flextable::width(j = 2, width = 2) %>%   
+    flextable::width(j = 3, width = 4) %>%   
+    flextable::bold(part = "header")  %>%   
+    flextable::align(j = 1:ncol(health_factors_office), align = "center", part = "all") %>%
+    flextable::align(j = 3, align = "left", part = "all") %>%
+    flextable::bold(part = "body") %>%  
+    flextable::border_outer(part = "all", border = custom_border) %>%  
+    flextable::bg(i = 1, j = 1:ncol(health_factors_office), bg = "#0070C0", part = "header") %>% 
+    flextable::color(i = 1, j = 1:ncol(health_factors_office), color = "white", part = "header") %>%  
+    flextable::bg(i = 1:nrow(health_factors_office), j = 1, bg = "#0070C0", part = "body") %>%  
+    flextable::color(i = 1:nrow(health_factors_office), j = 1, color = "white", part = "body")%>%
+    flextable::bg(i = seq(2, nrow(health_factors_office), by = 2), j = 2:ncol(health_factors_office), bg = "#F2F2F2", part = "body") %>%  
+    flextable::bg(i = seq(1, nrow(health_factors_office), by = 2), j = 2:ncol(health_factors_office), bg = "#E6E6FA", part = "body")  %>%
+    flextable::bg(i = 4:5,   j = 2:ncol(health_factors_office), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 6:7,   j = 2:ncol(health_factors_office), bg = "#E6E6FA", part = "body") %>%
+    flextable::bg(i = 8:10,  j = 2:ncol(health_factors_office), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 11:13, j = 2:ncol(health_factors_office), bg = "#E6E6FA", part = "body") %>%
+    flextable::bg(i = 14,    j = 2:ncol(health_factors_office), bg = "#F2F2F2", part = "body") %>%
+    flextable::bg(i = 15,    j = 2:ncol(health_factors_office), bg = "#E6E6FA", part = "body") %>%
+    flextable::bg(i = 16,    j = 2:ncol(health_factors_office), bg = "#F2F2F2", part = "body") %>%
+    flextable::align(part = "header", align = "center")%>%
+    flextable::merge_at(i = 4:5, j = 1)%>%
+    flextable::merge_at(i = 4:5, j = 2)%>%
+    
+    flextable::merge_at(i = 6:7, j = 1)%>%
+    flextable::merge_at(i = 6:7, j = 2)%>%
+    flextable::merge_at(i = 8:10, j = 1)%>%
+    flextable::merge_at(i = 8:10, j = 2)%>%
+    flextable::merge_at(i = 11:13, j = 1)%>%
+    flextable::merge_at(i = 11:13, j = 2)%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 1,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[1]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Within normal range")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 2,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[2]), 
+                                            color = if (source[2] < 10)
+                                              "#04B431"
+                                            else
+                                              "#ed2e1c"),
+                        flextable::as_chunk(" Are smokers")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 3,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[3]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Exercise 150 min week or more")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 4,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[4]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" Reported various levels of stress")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 5,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[5]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" of which reported Severe and Unbearable Stress levels")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 6,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[6]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Headcount within target")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 7,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[7]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" Headcount not within target")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 8,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[8]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" did above 20 hours of charity work")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i =9,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[9]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" did 1 to 20 hours of charity work")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 10,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[10]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" didn’t do any charity work last year")
+                      ))%>%
+    flextable::mk_par(
+      j = "Actual Results",
+      i = 11,
+      value = flextable::as_paragraph(
+        flextable::as_chunk("Only ", props = officer::fp_text(color = "black",bold = TRUE,font.size = 11)), 
+        flextable::colorize(sprintf("%.0f%%", source[11]), color = "#ed2e1c"),
+        flextable::as_chunk(" of respondents received Wellness Training last year. Of those who received Wellness Training:")
+      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 12,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[12]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" received only 1 seminar")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 13,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[13]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" received 2 or more")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 14,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%% of those above 30 checked", source[14]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk(" their sugar levels in the past year")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 15,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%% of those above 35 checked", source[15]), 
+                                            color = "#ed2e1c"),
+                        flextable::as_chunk("  their cholesterol levels in the past year")
+                      ))%>%
+    flextable::mk_par(j = "Actual Results",
+                      i = 16,
+                      value = flextable::as_paragraph(
+                        flextable::colorize(sprintf("%.0f%%", source[16]), 
+                                            color = "#04B431"),
+                        flextable::as_chunk(" Headcount")
+                      ))%>%
+    flextable::vline(j = 1:ncol(health_factors_office),
+                     border = officer::fp_border(color = "black", width = 1), part = "all")%>%
+    flextable::border(i = 2 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 3 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 4 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 6 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 8 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 11 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 14 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 15 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")%>%
+    flextable::border(i = 16 , j = 1:ncol(health_factors_office),
+                      border.top = officer::fp_border(color = "black", width = 1), 
+                      part = "body")
+  return(wellness_score_office)
+  
+}
+
+theme_MATSAVELAS <- function(x, 
+                                      header_bg = "#1F4E78",   # Dark Blue-Grey for Header
+                                      header_text = "#FFFFFF", # White Text for Header
+                                      odd_body_bg = "#D9E1F2", # Light Blue-Grey for Odd Rows
+                                      even_body_bg = "#FFFFFF",# White for Even Rows
+                                      body_text = "#000000"    # Black Text for Body
+) {
+  if (!inherits(x, "flextable")) {
+    stop(sprintf("Function `%s` supports only flextable objects.", "theme_table_style_medium9()"))
+  }
+  
+  # Count rows in each part
+  h_nrow <- flextable::nrow_part(x, "header")
+  f_nrow <- flextable::nrow_part(x, "footer")
+  b_nrow <- flextable::nrow_part(x, "body")
+  
+  # Remove borders and center-align header
+  x <- border_remove(x)
+  x <- flextable::align(x, align = "center", part = "header")
+  
+  # Apply Header Style (Bold, White Font, Dark Background)
+  if (h_nrow > 0) {
+    x <- flextable::bg(x, bg = header_bg, part = "header")               # Header Background
+    x <- flextable::color(x, color = header_text, part = "header")       # Header Font Color (White)
+    x <- flextable::bold(x, bold = TRUE, part = "header")                # Bold Header Text
+  }
+  
+  # Apply Footer Style (optional)
+  if (f_nrow > 0) {
+    x <- flextable::bg(x, bg = header_bg, part = "footer")
+    x <- flextable::color(x, color = header_text, part = "footer")
+    x <- flextable::bold(x, bold = TRUE, part = "footer")
+  }
+  
+  # Apply Alternating Row Colors for Body with Black Font
+  if (b_nrow > 0) {
+    even <- seq_len(b_nrow) %% 2 == 0
+    odd <- !even
+    
+    x <- flextable::bg(x, i = which(odd), bg = odd_body_bg, part = "body")   # Odd Rows (Light Blue-Grey)
+    x <- flextable::bg(x, i = which(even), bg = even_body_bg, part = "body") # Even Rows (White)
+    
+    x <- flextable::color(x, color = body_text, part = "body")              # Body Font Color (Black)
+  }
+  
+  # Align Text Columns Left and Numeric Columns Right
+  x <- flextable::align_text_col(x, align = "left", header = TRUE)
+  x <- flextable::align_nottext_col(x, align = "right", header = TRUE)
+  
+  return(x)
+}
+
+
+
+
+
+bar_category = function(data, column) {
+  
+  
+  filter_df = Campframerecords %>%
+    select({{ column }}) %>%
+    group_by({{ column }}) %>%
+    count()
+  v2  = filter_df %>%
+    ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+    theme_light() +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(x = NULL, y = NULL)
+  return(v2)
+}
+
+pie_category = function(data, column, view) {
+  
+  require(ggrepel)
+  require(ggplot2)
+  
+
+  filter_df = data %>%
+    select({{ column }}) %>%
+    group_by({{ column }}) %>%
+    count() %>%
+    drop_na() %>%
+    ungroup() %>%
+    mutate(per = round(100 * n / sum(n), 2))
+  
+  if(view == "percentage"){
+    
+
+    df2 <- filter_df %>%
+      mutate(
+        csum = rev(cumsum(rev(per))),  
+        pos = per / 2 + lead(csum, 1), 
+        pos = if_else(is.na(pos), per / 2, pos)
+      )
+
+    v_plot = ggplot(filter_df, aes(
+      x = "" ,
+      y = per,
+      fill = fct_inorder({{ column }})
+    )) +
+      geom_col(width = 1, color = 1) +
+      coord_polar(theta = "y") +
+      scale_fill_brewer(palette = "Pastel1") +
+      geom_label_repel(
+        data = df2,
+        aes(y = pos, label = paste0(per, "%")),  
+        size = 4.5,
+        nudge_x = 1,
+        show.legend = FALSE
+      ) +
+      guides(fill = guide_legend(title = "Levels")) +
+      theme_void()
+    return(v_plot)
+    
+  } else if(view == "count"){
+    
+
+    df3 = filter_df %>%
+      mutate(
+        csum = rev(cumsum(rev(n))),  
+        pos = n / 2 + lead(csum, 1),  
+        pos = if_else(is.na(pos), n / 2, pos)
+      )
+    
+
+    v_plot2 = ggplot(filter_df, aes(
+      x = "" ,
+      y = n,
+      fill = fct_inorder({{ column }})
+    )) +
+      geom_col(width = 1, color = 1) +
+      coord_polar(theta = "y") +
+      scale_fill_brewer(palette = "Pastel1") +
+      geom_label_repel(
+        data = df3,
+        aes(y = pos, label = paste0(n)),  
+        size = 4.5,
+        nudge_x = 1,
+        show.legend = FALSE
+      ) +
+      guides(fill = guide_legend(title = "Levels")) +
+      theme_void()
+    return(v_plot2)
+  }
+}
+
+likert_facet_multi = function(data,column,Columns,year,Threshold,likert_levels,custom_colors){
+  
+  
+  
+  filter_df = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }}) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::count()%>%
+    dplyr::filter(n>=Threshold)%>%
+    dplyr::arrange(desc(n))
+  
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  df_sum = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    dplyr::filter({{ column }} != "")%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer")%>%
+    dplyr::group_by({{ column }},Question) %>%
+    dplyr::summarise(disagree_sum = sum(answer %in% c(4, 5), na.rm = TRUE), .groups = 'drop')%>%
+    dplyr::select(-Question)%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::arrange(desc(disagree_sum))
+  
+  
+  
+  
+  levels_group = as.vector(unique(df_sum[[1]]))
+  
+  df2 = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} %in% levels_group) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer") %>%
+    dplyr::left_join(df_sum, by = setNames(nm = rlang::as_name(enquo(column))), relationship = "many-to-many")%>%
+    dplyr::mutate(question = reorder(Question, disagree_sum)) %>%
+    dplyr::mutate(Question = str_remove(Question, "^[^_]+_"))%>%  
+    dplyr::mutate(Question = str_replace_all(Question, "_", " "))%>%  
+    dplyr::mutate(row = row_number()) %>%
+    tidyr::pivot_wider(names_from = Question, values_from = answer)%>%
+    dplyr::arrange(desc(disagree_sum))%>%
+    dplyr::select(-c(disagree_sum ,  row))%>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = levels_group))%>%
+    dplyr::select(-question)%>%
+    dplyr::mutate(across(- {{ column }}, ~ case_when(
+      . == 1 ~ likert_levels[1],
+      . == 2 ~ likert_levels[2],
+      . == 3 ~ likert_levels[3],
+      . == 4 ~ likert_levels[4],
+      . == 5 ~ likert_levels[5],
+      TRUE   ~ as.character(.)
+    )))%>%
+    dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels)))
+  
+  v1 = ggstats::gglikert(df2, - {{ column }}, 
+                         totals_color = "black", 
+                         add_totals = TRUE, 
+                         facet_rows = vars({{ column }})
+                         ) +
+    aes(y = reorder(factor(.question), ave(as.numeric(.answer), .question, FUN = \(x) {
+      sum(x %in% 4:5) / length(x[!is.na(x)])
+    }))) +
+    labs(y = NULL) +
+    scale_y_discrete(position = "right") +               # Move Y-axis to the right
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      axis.text.y.right = element_text(color = "black"),  # Move Y-axis text to the right
+      legend.position = "bottom",
+      strip.text = element_text(color = "black", face = "bold"),
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0)        # Facet text on the left
+    ) +
+    facet_grid(rows = vars({{ column }}),
+               switch = "y",                             # Switch facets to the left
+               labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)))+
+    scale_fill_manual(values = custom_colors)
+  
+  filter_df = filter_df %>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = rev(levels_group)))
+  
+  v2 = filter_df %>%
+    ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+    theme_light() +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(x = NULL, y = NULL)
+  
+  return(list(v1,v2))
+  
+  
+  
+}
+
+likert_facet_multi_na = function(data,column,Columns,year,Threshold,likert_levels_na,custom_colors_na){
+  
+  
+ 
+  
+  filter_df = data %>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }}) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::count()%>%
+    dplyr::filter(n>=Threshold)%>%
+    dplyr::arrange(desc(n))
+  
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  df_sum = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer")%>%
+    dplyr::mutate(answer = ifelse(is.na(answer), 0, answer))%>%
+    dplyr::group_by({{ column }},Question) %>%
+    dplyr::summarise(disagree_sum = sum(answer %in% c(4, 5), na.rm = TRUE), .groups = 'drop')%>%
+    dplyr::select(-Question)%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::arrange(desc(disagree_sum))
+  
+  
+  
+  
+  levels_group = as.vector(unique(df_sum[[1]]))
+  
+  df2 = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} %in% levels_group) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer") %>%
+    dplyr::left_join(df_sum, by = setNames(nm = rlang::as_name(enquo(column))), relationship = "many-to-many")%>%
+    dplyr::mutate(answer = ifelse(is.na(answer), 0, answer))%>%
+    dplyr::mutate(question = reorder(Question, disagree_sum)) %>%
+    dplyr::mutate(
+      Question = ifelse(
+        str_starts(Question, "Recreational_"), 
+        str_remove(Question, "^Recreational_Facilities_"), 
+        str_remove(Question, "^[^_]+_")
+      )
+    ) %>%
+    dplyr::mutate(Question = str_replace_all(Question, "_", " ")) %>%
+    #dplyr::mutate(Question = str_remove(Question, "^[^_]+_"))%>%  
+    #dplyr::mutate(Question = str_replace_all(Question, "_", " "))%>%  
+    dplyr::mutate(row = row_number()) %>%
+    tidyr::pivot_wider(names_from = Question, values_from = answer)%>%
+    dplyr::arrange(desc(disagree_sum))%>%
+    dplyr::select(-c(disagree_sum ,  row))%>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = levels_group))%>%
+    dplyr::select(-question)%>%
+    dplyr::mutate(across(- {{ column }}, ~ case_when(
+      . == 0 ~ likert_levels_na[1],
+      . == 1 ~ likert_levels_na[2],
+      . == 2 ~ likert_levels_na[3],
+      . == 3 ~ likert_levels_na[4],
+      . == 4 ~ likert_levels_na[5],
+      . == 5 ~ likert_levels_na[6],
+      TRUE   ~ as.character(.)
+    )))%>%
+    dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels_na)))
+  
+  v1 = gglikert(df2, -{{ column }}, totals_color = "black", add_totals = TRUE, facet_rows = vars({{ column }})) +
+    aes(y = reorder(factor(.question), ave(as.numeric(.answer), .question, FUN = \(x) {
+      sum(x %in% 4:5) / length(x[!is.na(x)])
+    }))) +
+    labs(y = NULL) +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      axis.text.y.right = element_text(color = "black"),  
+      legend.position = "bottom",
+      strip.text = element_text(color = "black", face = "bold"),
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0)        
+    ) +
+    facet_grid(rows = vars({{ column }}),
+               switch = "y",                             
+               labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)))+
+    scale_y_discrete(position = "right") +              
+    scale_fill_manual(values = custom_colors_na)
+  
+  filter_df = filter_df %>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = rev(levels_group)))
+  
+
+  v2 = filter_df %>%
+    ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+    theme_light() +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(x = NULL, y = NULL)
+  
+
+  return(list(v1,v2))
+  
+  
+  
+}
