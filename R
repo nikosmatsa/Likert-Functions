@@ -2799,13 +2799,23 @@ theme_MATSAVELAS <- function(x,
 
 
 
-bar_category = function(data, column) {
+bar_category = function(data, column,Threshold) {
   
   
   filter_df = data %>%
-    select({{ column }}) %>%
-    group_by({{ column }}) %>%
-    count()
+    dplyr::select({{ column }}) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::group_by({{ column }}) %>%
+    dplyr::count()%>%
+    dplyr::arrange(desc(n))%>%
+    dplyr::filter(n >= Threshold)
+  
+  
+  parameters = as.vector(filter_df[[1]])
+  
+  filter_df = filter_df %>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = parameters))
+  
   v2  = filter_df %>%
     ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
     geom_bar(stat = "identity", fill = "lightgrey") +
