@@ -1,42 +1,3 @@
-library(tidyverse)
-library(ggstats)
-library(flextable)
-library(patchwork)
-library(tidytext)
-library(stringr)
-
-
-
-custom_colors = c(
-  "Very \n Dissatisfied" = "#ed2e1c",
-  "Dissatisfied" = "#e09c95",
-  "Neutral" = "#85c1e9",
-  "Satisfied" = "#7FF98B",
-  "Very \n Satisfied" = "#04B431"
-)
-
-likert_levels = c("Very \n Dissatisfied",
-                  "Dissatisfied",
-                  "Neutral",
-                  "Satisfied",
-                  "Very \n Satisfied")
-
-
-likert_levels_na = c("Not \n Available",
-                   "Very \n Dissatisfied",
-                  "Dissatisfied",
-                  "Neutral",
-                  "Satisfied",
-                  "Very \n Satisfied")
-
-
-custom_colors_na = c("Not \n Available" = "black",
-  "Very \n Dissatisfied" = "#ed2e1c",
-  "Dissatisfied" = "#e09c95",
-  "Neutral" = "#85c1e9",
-  "Satisfied" = "#7FF98B",
-  "Very \n Satisfied" = "#04B431"
-)
 
 
 likert_fun = function(data, col1 , col2, year, threshold,
@@ -3004,9 +2965,22 @@ likert_facet_multi = function(data,column,Columns,year,Threshold,likert_levels,c
     )))%>%
     dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels)))
   
+  
+  num_categories = length(unique(df2[[rlang::as_name(enquo(column))]]))
+  label_size     = max(2, min(7, 12 / num_categories)) 
+  
+  
+  
+  
+  
   v1 = ggstats::gglikert(df2, - {{ column }}, 
-                         totals_color = "black", 
+                         totals_color = "black",
+                         
                          add_totals = TRUE, 
+                         
+                         labels_size = label_size,       
+                         totals_size = label_size,       
+                         
                          facet_rows = vars({{ column }})
                          ) +
     aes(y = reorder(factor(.question), ave(as.numeric(.answer), .question, FUN = \(x) {
@@ -3102,8 +3076,6 @@ likert_facet_multi_na = function(data,column,Columns,year,Threshold,likert_level
       )
     ) %>%
     dplyr::mutate(Question = str_replace_all(Question, "_", " ")) %>%
-    #dplyr::mutate(Question = str_remove(Question, "^[^_]+_"))%>%  
-    #dplyr::mutate(Question = str_replace_all(Question, "_", " "))%>%  
     dplyr::mutate(row = row_number()) %>%
     tidyr::pivot_wider(names_from = Question, values_from = answer)%>%
     dplyr::arrange(desc(disagree_sum))%>%
@@ -3120,6 +3092,11 @@ likert_facet_multi_na = function(data,column,Columns,year,Threshold,likert_level
       TRUE   ~ as.character(.)
     )))%>%
     dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels_na)))
+  
+  
+  num_categories = length(unique(df2[[rlang::as_name(enquo(column))]]))
+  label_size     = max(2.5, min(4, 12 / num_categories)) 
+  
   
   v1 = gglikert(df2, -{{ column }}, totals_color = "black", add_totals = TRUE, facet_rows = vars({{ column }})) +
     aes(y = reorder(factor(.question), ave(as.numeric(.answer), .question, FUN = \(x) {
