@@ -2986,7 +2986,7 @@ likert_facet_sort = function(dataframe,column,Columns,year,Threshold,likert_leve
     ) + 
     scale_y_discrete(position = "right",
                      labels = function(x) sub(".*?\\.", "", x))+
-    scale_fill_manual(values = custom_colors)
+    scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1))
   
   filter_df=filter_df%>%
     dplyr::mutate({{ column }} := factor({{ column }}, levels = parameters))
@@ -3096,7 +3096,7 @@ likert_facet_sort_na = function(dataframe,column,Columns,year,Threshold,likert_l
     ) + 
     scale_y_discrete(position = "right",
                      labels = function(x) sub(".*?\\.", "", x))+
-    scale_fill_manual(values = custom_colors_na)
+    scale_fill_manual(values = custom_colors_na, guide = guide_legend(nrow = 1))
   
   filter_df=filter_df%>%
     dplyr::mutate({{ column }} := factor({{ column }}, levels = parameters))
