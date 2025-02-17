@@ -3128,9 +3128,8 @@ likert_facet_sort_na = function(dataframe,column,Columns,year,Threshold,likert_l
 
 
                      
+
 likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_levels,custom_colors){
-  
-  
   
   filter_df = dataframe %>%
     dplyr::filter(Year == year)%>%
@@ -3149,10 +3148,10 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     dplyr::select({{ column }},all_of(Columns))%>%
     dplyr::filter({{ column }} != "")%>%
     dplyr::filter({{ column }} %in% parameters)%>%
+    dplyr::mutate(across(-{{ column }}, ~replace_na(.x, 0)))%>%
     dplyr::rename_with(~ stringr::str_remove(.x, "^[^_]+_") %>%
                          stringr::str_replace_all("_", " "), 
                        .cols = -{{ column }})%>%
-    mutate(across(-{{ column }}, ~replace_na(.x, 0)))%>%
     tidyr::pivot_longer(!{{ column }}, names_to = "question", values_to = "response")%>%
     dplyr::mutate(row = row_number()) %>%
     tidyr::pivot_wider(names_from = question, values_from = response)%>%
@@ -3169,39 +3168,49 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels_na)))%>%
     dplyr::mutate({{ column }} := factor({{ column }}, levels = parameters))
   
-  dat <- df_clear |>
+  dat = df_clear %>%
     mutate(
       across(-c({{ column }}), ~ factor(.x, likert_levels_na))
-    ) |>
-    pivot_longer(-c({{ column }}), names_to = ".question") |>
-    filter(!is.na(value)) |>
-    count(.question, value, {{ column }}) |>
-    complete(.question, value, {{ column }}, fill = list(n = 0)) |>
+    ) %>%
+    pivot_longer(-c({{ column }}), names_to = ".question") %>%
+    filter(!is.na(value)) %>%
+    count(.question, value, {{ column }}) %>%
+    complete(.question, value, {{ column }}, fill = list(n = 0)) %>%
     mutate(
       prop = n / sum(n),
-      prop_lower = sum(prop[value %in% likert_levels_na[2:3]]),
-      prop_higher = sum(prop[value %in% likert_levels_na[5:6]]),
+      prop_lower   = sum(prop[value %in% likert_levels_na[2:3]]),
+      prop_higher  = sum(prop[value %in% likert_levels_na[5:6]]),
+      prop_lower1  = sum(prop[value %in% likert_levels_na[1:3]]),
+      prop_higher1 = sum(prop[value %in% likert_levels_na[4:6]]),
       .by = c(.question, {{ column }})
     ) |>
-    arrange({{ column }}, prop_higher) |>
+    arrange({{ column }}, prop_higher) %>%
     mutate(
       .question = interaction({{ column }}, .question),
       .question = fct_inorder(.question)
     )
   
-  dat_tot <- dat |>
-    distinct({{ column }}, .question, prop_lower, prop_higher) |>
+  dat_tot = dat %>%
+    distinct(
+      {{ column }}, .question,
+      prop_lower, prop_higher,
+      prop_lower1, prop_higher1
+    ) %>%
+    mutate(
+      x_tot_lower = -max(prop_lower1)-0.05,
+      x_tot_higher = max(prop_higher1)+0.05
+    ) %>%
     pivot_longer(-c({{ column }}, .question),
                  names_to = c(".value", "name"),
-                 names_sep = "_"
-    ) |>
+                 names_pattern = "^(.*)_(lower|higher)"
+    ) %>%
     mutate(
-      hjust_tot = ifelse(name == "lower", .5, .5),
-      x_tot = ifelse(name == "lower", -1, 1)
+      hjust_tot = ifelse(name == "lower", .5, .5)#,
+     # x_tot = ifelse(name == "lower", -1, 1)
     )
   
-  data_fun <- function(.data) {
-    .data |>
+  data_fun = function(.data) {
+    .data %>%
       mutate(
         .question = interaction({{ column }}, .question),
         .question = reorder(
@@ -3214,7 +3223,9 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
       )
   }
   
-  v1 <- gglikert(df_clear, -{{ column }},
+  
+  
+  v1 = gglikert(df_clear, -{{ column }},
                  facet_rows = vars({{ column }}),
                  add_totals = FALSE,
                  totals_include_center = FALSE,
@@ -3247,31 +3258,28 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
       legend.position = "bottom",
       strip.text = element_text(color = "black", face = "bold"),
       strip.placement = "outside",
-      strip.text.y.left = element_text(angle = 0), # Facet text on the left
-      panel.grid.major.y = element_blank()
+      strip.text.y.left = element_text(angle = 0) # Facet text on the left
     ) +
     theme(strip.text.y = element_text(angle = 0)) +
     facet_wrap(
       facets = vars({{ column }}),
-      labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)),
+      labeller = labeller(.rows = function(x) label_wrap_gen(width = 5)(x)),
       ncol = 1, scales = "free_y",
       strip.position = "left"
     ) +
     scale_y_discrete(position = "right", labels = function(x) sub(".*?\\.", "", x)) +
-    scale_fill_manual(values = custom_colors_na)+
-    theme(panel.grid.major.y = element_blank())
+    scale_fill_manual(values = custom_colors_na, guide = guide_legend(nrow = 1))
   
-  v2 <- filter_df %>%
+  v2 = filter_df %>%
     ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
     geom_bar(stat = "identity", fill = "lightgrey") +
     geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
     scale_y_discrete(
       limits = rev, expand = c(0, 0)
     ) +
-    theme_light() +
     facet_wrap(
       facets = vars({{ column }}),
-      labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)),
+      labeller = labeller(.rows = function(x) label_wrap_gen(width = 5)(x)),
       ncol = 1, scales = "free_y",
       strip.position = "left"
     ) +
@@ -3283,11 +3291,5 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
       strip.text.y = element_blank()
     ) +
     labs(x = NULL, y = NULL)
-  
-  
   return(list(v1,v2))
-  
-  
-  
 }
-
