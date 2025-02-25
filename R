@@ -188,7 +188,7 @@ likert_fun = function(data, col1 , col2, year, threshold,
       
       v1 = ggstats::gglikert(df2) +
         aes(y = factor(.question, levels = rev(parameters))) +  
-        scale_fill_manual(values = custom_colors) + 
+        scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1)) + 
         labs(y = "") +
         theme(
           panel.border = element_rect(color = "gray", fill = NA),
@@ -278,7 +278,7 @@ likert_fun_multi = function(data, col2,Columns, year, threshold,
           FUN = \(x) sum(x %in% 1:2) / length(x[!is.na(x)])
         )
       )) +
-      scale_fill_manual(values = custom_colors) +
+      scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1)) +
       labs(y = "") +
       theme(
         panel.border = element_rect(color = "gray", fill = NA),
@@ -505,7 +505,7 @@ likert_fun_multi_na = function(data, col2,Columns, year, threshold,
           FUN = \(x) sum(x %in% 1:2) / length(x[!is.na(x)])
         )
       )) +
-      scale_fill_manual(values = custom_colors_na) +
+      scale_fill_manual(values = custom_colors_na, guide = guide_legend(nrow = 1)) +
       labs(y = "") +
       theme(
         panel.border = element_rect(color = "gray", fill = NA),
@@ -710,7 +710,7 @@ likert_year = function(data,years, cols,likert_levels,custom_colors) {
     tidyr::pivot_longer(-c(id, Year), names_to = "group") %>%
     tidyr::pivot_wider(names_from = Year) %>%
     ggstats::gglikert(c(rev(unique(df$Year)))) +
-    scale_fill_manual(values = custom_colors) +
+    scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1)) +
     theme(
       panel.border = element_rect(color = "gray", fill = NA),
       strip.text = element_text(color = "black"),
@@ -2830,19 +2830,20 @@ bar_category = function(data, column,Threshold) {
   return(v2)
 }
 
-pie_category = function(data, column, view) {
+pie_category = function(data, column,year, view) {
   
   require(ggrepel)
   require(ggplot2)
   
 
   filter_df = data %>%
-    select({{ column }}) %>%
-    group_by({{ column }}) %>%
-    count() %>%
-    drop_na() %>%
-    ungroup() %>%
-    mutate(per = round(100 * n / sum(n), 2))
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }}) %>%
+    dplyr::group_by({{ column }}) %>%
+    dplyr::count() %>%
+    tidyr::drop_na() %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(per = round(100 * n / sum(n), 2))
   
   if(view == "percentage"){
     
@@ -2905,6 +2906,244 @@ pie_category = function(data, column, view) {
   }
 }
 
+likert_facet_multi = function(data,column,Columns,year,Threshold,likert_levels,custom_colors){
+  
+  
+  
+  filter_df = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }}) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::count()%>%
+    dplyr::filter(n>=Threshold)%>%
+    dplyr::arrange(desc(n))
+  
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  df_sum = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    dplyr::filter({{ column }} != "")%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer")%>%
+    dplyr::group_by({{ column }},Question) %>%
+    dplyr::summarise(disagree_sum = sum(answer %in% c(4, 5), na.rm = TRUE), .groups = 'drop')%>%
+    dplyr::select(-Question)%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::arrange(desc(disagree_sum))
+  
+  
+  
+  
+  levels_group = as.vector(unique(df_sum[[1]]))
+  
+  df2 = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} %in% levels_group) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer") %>%
+    dplyr::left_join(df_sum, by = setNames(nm = rlang::as_name(enquo(column))), relationship = "many-to-many")%>%
+    dplyr::mutate(question = reorder(Question, disagree_sum)) %>%
+    dplyr::mutate(Question = str_remove(Question, "^[^_]+_"))%>%  
+    dplyr::mutate(Question = str_replace_all(Question, "_", " "))%>%  
+    dplyr::mutate(row = row_number()) %>%
+    tidyr::pivot_wider(names_from = Question, values_from = answer)%>%
+    dplyr::arrange(desc(disagree_sum))%>%
+    dplyr::select(-c(disagree_sum ,  row))%>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = levels_group))%>%
+    dplyr::select(-question)%>%
+    dplyr::mutate(across(- {{ column }}, ~ case_when(
+      . == 1 ~ likert_levels[1],
+      . == 2 ~ likert_levels[2],
+      . == 3 ~ likert_levels[3],
+      . == 4 ~ likert_levels[4],
+      . == 5 ~ likert_levels[5],
+      TRUE   ~ as.character(.)
+    )))%>%
+    dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels)))
+  
+  
+  num_categories = length(unique(df2[[rlang::as_name(enquo(column))]]))
+  label_size     = max(2, min(7, 12 / num_categories)) 
+  
+  
+  
+  
+  
+  v1 = ggstats::gglikert(df2, - {{ column }}, 
+                         totals_color = "black",
+                         
+                         add_totals = TRUE, 
+                         
+                         labels_size = label_size,       
+                         totals_size = label_size,       
+                         
+                         facet_rows = vars({{ column }})
+                         ) +
+    aes(y = reorder(factor(.question), ave(as.numeric(.answer), .question, FUN = \(x) {
+      sum(x %in% 4:5) / length(x[!is.na(x)])
+    }))) +
+    labs(y = NULL) +
+    scale_y_discrete(position = "right") +               # Move Y-axis to the right
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      axis.text.y.right = element_text(color = "black"),  # Move Y-axis text to the right
+      legend.position = "bottom",
+      strip.text = element_text(color = "black", face = "bold"),
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0)        # Facet text on the left
+    ) +
+    facet_grid(rows = vars({{ column }}),
+               switch = "y",                             # Switch facets to the left
+               labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)))+
+    scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1))
+  
+  filter_df = filter_df %>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = rev(levels_group)))
+  
+  v2 = filter_df %>%
+    ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+    theme_light() +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(x = NULL, y = NULL)
+  
+  return(list(v1,v2))
+  
+  
+  
+}
+
+likert_facet_multi_na = function(data,column,Columns,year,Threshold,likert_levels_na,custom_colors_na){
+  
+  
+ 
+  
+  filter_df = data %>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }}) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::count()%>%
+    dplyr::filter(n>=Threshold)%>%
+    dplyr::arrange(desc(n))
+  
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  df_sum = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer")%>%
+    dplyr::mutate(answer = ifelse(is.na(answer), 0, answer))%>%
+    dplyr::group_by({{ column }},Question) %>%
+    dplyr::summarise(disagree_sum = sum(answer %in% c(4, 5), na.rm = TRUE), .groups = 'drop')%>%
+    dplyr::select(-Question)%>%
+    dplyr::group_by({{ column }})%>%
+    dplyr::arrange(desc(disagree_sum))
+  
+  
+  
+  
+  levels_group = as.vector(unique(df_sum[[1]]))
+  
+  df2 = data%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }},all_of(Columns))%>%
+    dplyr::filter({{ column }} %in% levels_group) %>%
+    dplyr::filter({{ column }} != "")%>%
+    dplyr::filter({{ column }} %in% parameters )%>%
+    tidyr::pivot_longer(cols = Columns, names_to = "Question", values_to = "answer") %>%
+    dplyr::left_join(df_sum, by = setNames(nm = rlang::as_name(enquo(column))), relationship = "many-to-many")%>%
+    dplyr::mutate(answer = ifelse(is.na(answer), 0, answer))%>%
+    dplyr::mutate(question = reorder(Question, disagree_sum)) %>%
+    dplyr::mutate(
+      Question = ifelse(
+        str_starts(Question, "Recreational_"), 
+        str_remove(Question, "^Recreational_Facilities_"), 
+        str_remove(Question, "^[^_]+_")
+      )
+    ) %>%
+    dplyr::mutate(Question = str_replace_all(Question, "_", " ")) %>%
+    dplyr::mutate(row = row_number()) %>%
+    tidyr::pivot_wider(names_from = Question, values_from = answer)%>%
+    dplyr::arrange(desc(disagree_sum))%>%
+    dplyr::select(-c(disagree_sum ,  row))%>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = levels_group))%>%
+    dplyr::select(-question)%>%
+    dplyr::mutate(across(- {{ column }}, ~ case_when(
+      . == 0 ~ likert_levels_na[1],
+      . == 1 ~ likert_levels_na[2],
+      . == 2 ~ likert_levels_na[3],
+      . == 3 ~ likert_levels_na[4],
+      . == 4 ~ likert_levels_na[5],
+      . == 5 ~ likert_levels_na[6],
+      TRUE   ~ as.character(.)
+    )))%>%
+    dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels_na)))
+  
+  
+  num_categories = length(unique(df2[[rlang::as_name(enquo(column))]]))
+  label_size     = max(2.5, min(4, 12 / num_categories)) 
+  
+  
+  v1 = gglikert(df2, -{{ column }}, totals_color = "black", add_totals = TRUE, facet_rows = vars({{ column }})) +
+    aes(y = reorder(factor(.question), ave(as.numeric(.answer), .question, FUN = \(x) {
+      sum(x %in% 4:5) / length(x[!is.na(x)])
+    }))) +
+    labs(y = NULL) +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      axis.text.y.right = element_text(color = "black"),  
+      legend.position = "bottom",
+      strip.text = element_text(color = "black", face = "bold"),
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0)        
+    ) +
+    facet_grid(rows = vars({{ column }}),
+               switch = "y",                             
+               labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)))+
+    scale_y_discrete(position = "right") +              
+    scale_fill_manual(values = custom_colors_na, guide = guide_legend(nrow = 1))
+  
+  filter_df = filter_df %>%
+    dplyr::mutate({{ column }} := factor({{ column }}, levels = rev(levels_group)))
+  
+
+  v2 = filter_df %>%
+    ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+    theme_light() +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(x = NULL, y = NULL)
+  
+
+  return(list(v1,v2))
+  
+  
+  
+}
+
+
+
 
 likert_facet_sort = function(dataframe,column,Columns,year,Threshold,likert_levels,custom_colors){
   
@@ -2941,9 +3180,17 @@ likert_facet_sort = function(dataframe,column,Columns,year,Threshold,likert_leve
     dplyr::select({{ column }},all_of(Columns))%>%
     dplyr::filter({{ column }} != "")%>%
     dplyr::filter({{ column }} %in% parameters)%>%
-    dplyr::rename_with(~ stringr::str_remove(.x, "^[^_]+_") %>%
-                         stringr::str_replace_all("_", " "), 
-                       .cols = -{{ column }})%>%
+    dplyr::rename_with(
+      ~ .x %>%
+        stringr::str_replace("Internet_Entertainment_Streaming_Platforms_", "Internet_Streaming_Platforms_") %>% 
+        stringr::str_remove("^[^_]+_") %>%  
+        stringr::str_remove("Quality") %>%  
+        stringr::str_replace_all("_", " "), 
+      .cols = -{{ column }}
+    ) %>%
+    # dplyr::rename_with(~ stringr::str_remove(.x, "^[^_]+_") %>%
+    #                      stringr::str_replace_all("_", " "), 
+    #                    .cols = -{{ column }})%>%
     pivot_longer(!{{ column }}, names_to = "question", values_to = "response")%>%
     drop_na()%>%
     dplyr::mutate(row = row_number()) %>%
@@ -3015,120 +3262,6 @@ likert_facet_sort = function(dataframe,column,Columns,year,Threshold,likert_leve
 
 
 
-
-likert_facet_sort_na = function(dataframe,column,Columns,year,Threshold,likert_levels,custom_colors){
-  
-  
-  
-  filter_df = dataframe %>%
-    dplyr::filter(Year == year)%>%
-    dplyr::select({{ column }}) %>%
-    dplyr::filter({{ column }} != "")%>%
-    dplyr::group_by({{ column }})%>%
-    dplyr::count()%>%
-    dplyr::filter(n>=Threshold)%>%
-    tidyr::drop_na()
-  
-  parameters <- as.vector(filter_df[[1]])
-  
-  data_fun = function(.data) {
-    .data %>%
-      mutate(
-        .question = interaction({{ column }}, .question),
-        .question = reorder(
-          .question,
-          ave(as.numeric(.answer), .question, FUN = \(x) {
-            sum(x %in% 4:5) / length(x[!is.na(x)])
-          }),
-          decreasing = TRUE
-        )
-      )
-  }
-  
-  
-  dataframe=dataframe%>%
-    dplyr::filter(Year == year)%>%
-    dplyr::select({{ column }},all_of(Columns))%>%
-    dplyr::filter({{ column }} != "")%>%
-    dplyr::filter({{ column }} %in% parameters)%>%
-    dplyr::rename_with(~ stringr::str_remove(.x, "^[^_]+_") %>%
-                         stringr::str_replace_all("_", " "), 
-                       .cols = -{{ column }})%>%
-    mutate(across(-{{ column }}, ~replace_na(.x, 0)))%>%
-    tidyr::pivot_longer(!{{ column }}, names_to = "question", values_to = "response")%>%
-    dplyr::mutate(row = row_number()) %>%
-    tidyr::pivot_wider(names_from = question, values_from = response)%>%
-    dplyr::select(-row)%>%
-    dplyr::mutate(across(- {{ column }}, ~ case_when(
-      . == 0 ~ likert_levels_na[1],
-      . == 1 ~ likert_levels_na[2],
-      . == 2 ~ likert_levels_na[3],
-      . == 3 ~ likert_levels_na[4],
-      . == 4 ~ likert_levels_na[5],
-      . == 5 ~ likert_levels_na[6],
-      TRUE   ~ as.character(.)
-    )))%>%
-    dplyr::mutate(across(- {{ column }}, ~ factor(.x, levels = likert_levels_na)))%>%
-    dplyr::mutate({{ column }} := factor({{ column }}, levels = parameters))
-  
-  v1 = ggstats::gglikert(dataframe, -{{ column }},
-                         facet_rows = vars({{ column }}),
-                         totals_color = "black",
-                         data_fun = data_fun
-  ) +
-    labs(y = NULL) +
-    theme(
-      panel.border = element_rect(color = "gray", fill = NA),
-      axis.text.x = element_blank(),
-      axis.text.y.right = element_text(color = "black"),  
-      legend.position = "bottom",
-      strip.text = element_text(color = "black", face = "bold"),
-      strip.placement = "outside",
-      strip.text.y.left = element_text(angle = 0)       
-    ) +
-    theme(strip.text.y = element_text(angle = 0)) +
-    facet_wrap(
-      facets = vars({{ column }}),
-      labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)),
-      ncol = 1, 
-      scales = "free_y",
-      strip.position = "left"
-    ) + 
-    scale_y_discrete(position = "right",
-                     labels = function(x) sub(".*?\\.", "", x))+
-    scale_fill_manual(values = custom_colors_na, guide = guide_legend(nrow = 1))
-  
-  filter_df=filter_df%>%
-    dplyr::mutate({{ column }} := factor({{ column }}, levels = parameters))
-  
-  v2 = filter_df %>%
-    ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
-    geom_bar(stat = "identity", fill = "lightgrey") +
-    geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
-    scale_y_discrete(
-      limits = rev,#function(x) rev(levels(x)), #rev,
-      expand = c(0, 0)
-    ) +
-    theme_light() +
-    theme(
-      panel.border = element_rect(color = "gray", fill = NA),
-      axis.text.x = element_blank(),
-      legend.position = "none"
-    ) +
-    labs(x = NULL, y = NULL)
-  
-  return(list(v1,v2))
-  
-  
-  
-}
-
-
-
-
-
-                     
-
 likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_levels,custom_colors){
   
   filter_df = dataframe %>%
@@ -3178,7 +3311,7 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     complete(.question, value, {{ column }}, fill = list(n = 0)) %>%
     mutate(
       prop = n / sum(n),
-      prop_lower   = sum(prop[value %in% likert_levels_na[2:3]]),
+      prop_lower   = sum(prop[value %in% likert_levels_na[1:3]]),
       prop_higher  = sum(prop[value %in% likert_levels_na[5:6]]),
       prop_lower1  = sum(prop[value %in% likert_levels_na[1:3]]),
       prop_higher1 = sum(prop[value %in% likert_levels_na[4:6]]),
@@ -3206,7 +3339,7 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     ) %>%
     mutate(
       hjust_tot = ifelse(name == "lower", .5, .5)#,
-     # x_tot = ifelse(name == "lower", -1, 1)
+      # x_tot = ifelse(name == "lower", -1, 1)
     )
   
   data_fun = function(.data) {
@@ -3226,10 +3359,9 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
   
   
   v1 = gglikert(df_clear, -{{ column }},
-                 facet_rows = vars({{ column }}),
-                 add_totals = FALSE,
-                 totals_include_center = FALSE,
-                 data_fun = data_fun
+                facet_rows = vars({{ column }}),
+                add_totals = FALSE,
+                data_fun = data_fun
   ) +
     geom_label(
       aes(
@@ -3293,3 +3425,526 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     labs(x = NULL, y = NULL)
   return(list(v1,v2))
 }
+
+
+
+
+# 
+# likert_facet_not_available = function(dataframe,
+#                                       column,
+#                                       Columns,
+#                                       year,
+#                                       Threshold,
+#                                       likert_levels,
+#                                       custom_color) {
+#   
+#   
+#   require(ggstats)
+#   require(dplyr)
+#   require(ggplot2)
+#   
+#   
+#   
+#   
+#   
+#   filter_df = dataframe %>%
+#     dplyr::filter(Year == year) %>%
+#     dplyr::select({{ column }}) %>%
+#     dplyr::filter({{ column }} != "") %>%
+#     dplyr::filter(!is.na({{ column }})) %>%
+#     dplyr::group_by({{ column }}) %>%
+#     dplyr::count() %>%
+#     dplyr::filter(n >= Threshold) %>%
+#     tidyr::drop_na()
+#   
+#   
+#   
+#   
+#   parameters <- as.vector(filter_df[[1]])
+#   
+#   data_fun = function(.data) {
+#     .data %>%
+#       mutate(
+#         .question = interaction({{ column }}, .question),
+#         .question = reorder(
+#           .question,
+#           ave(as.numeric(.answer), .question, FUN = \(x) {
+#             sum(x %in% 4:5) / length(x[!is.na(x)])
+#           }),
+#           decreasing = TRUE
+#         )
+#       )
+#   }
+# 
+#   df = dataframe %>%
+#     dplyr::filter(Year == year)%>%
+#     dplyr::select({{ column }}, all_of(Columns)) %>%
+#     dplyr::filter({{ column }} != "") %>%
+#     dplyr::filter({{ column }} %in% parameters) %>%
+#     dplyr::rename_with(
+#       ~ .x %>%
+#         stringr::str_remove("^Facilities[^_]*_") %>%
+#         stringr::str_replace( "Recreational_Facilities_Indoor_Outdoor_Recreational_Facilities", "Facilities_Indoor_Outdoor_Facilities") %>%
+#         stringr::str_replace( "Recreational_Facilities_Transportation_Outside_Working_Hours",  "Recreational_Facilities_Transportation_After_Work") %>%
+#         stringr::str_replace( "Internet_Entertainment_Streaming_Platforms_", "Internet_Streaming_Platforms_") %>%
+#         stringr::str_remove("^[^_]+_") %>%
+#         stringr::str_remove("Quality") %>%
+#         stringr::str_remove("^Facilities[^_]*_") %>%
+#         stringr::str_remove("Recreational") %>%
+#         stringr::str_replace_all("_", " "),
+#       .cols = -{{ column }}
+#     ) %>%
+#     pivot_longer(!{{ column }}, names_to = "question", values_to = "response") %>%
+#     drop_na() %>%
+#     dplyr::mutate(row = row_number()) %>%
+#     pivot_wider(names_from = question, values_from = response) %>%
+#     select(-row) %>%
+#     dplyr::mutate(across(
+#       -{{ column }},
+#       ~ case_when(
+#         . == 1 ~ likert_levels[1],
+#         . == 2 ~ likert_levels[2],
+#         . == 3 ~ likert_levels[3],
+#         . == 4 ~ likert_levels[4],
+#         . == 5 ~ likert_levels[5]#,
+#      #   TRUE   ~ as.character(.)
+#       )
+#     )) %>%
+#     mutate(across(-{{ column }}, ~ factor(.x, levels = likert_levels))) %>%
+#     dplyr::mutate({{ column }} := factor({{ column }}, levels = parameters))
+#   
+#   
+#   v1 = gglikert(
+#     df,
+#     -{{ column }},
+#     facet_rows = vars({{ column }}),
+#     add_totals = TRUE,
+#     labels_color = "black",
+#     data_fun = data_fun
+#   ) +
+#     scale_y_discrete(labels = ~ gsub("^.*\\.", "", .x)) +
+#     scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1))+
+#     labs(y = NULL) +
+#     theme(
+#       panel.border = element_rect(color = "gray", fill = NA),
+#       axis.text.x = element_blank(),
+#       axis.text.y.right = element_text(color = "black"),
+#       legend.position = "bottom",
+#       strip.text = element_text(color = "black", face = "bold"),
+#       strip.placement = "outside",
+#       strip.text.y.left = element_text(angle = 0)
+#     ) +
+#     theme(strip.text.y = element_text(angle = 0)) +
+#     facet_wrap(
+#       facets = vars({{ column }}),
+#       labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)),
+#       ncol = 1,
+#       scales = "free_y",
+#       strip.position = "left"
+#     ) +
+#     scale_y_discrete(
+#       position = "right",
+#       labels = ~ gsub("^.*\\.", "", .x)
+#     ) +
+#     scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1)) #+
+#   
+#   v2 = filter_df %>%
+#     ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
+#     geom_bar(stat = "identity", fill = "lightgrey") +
+#     geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+#     scale_y_discrete(limits = rev, expand = c(0, 0)) +
+#     facet_wrap(
+#       facets = vars({{ column }}),
+#       labeller = labeller(
+#         .rows = function(x)
+#           label_wrap_gen(width = 10)(x)
+#       ),
+#       ncol = 1,
+#       scales = "free_y",
+#       strip.position = "left"
+#     ) +
+#     theme_light() +
+#     theme(
+#       panel.border = element_rect(color = "gray", fill = NA),
+#       axis.text.x = element_blank(),
+#       axis.text.y = element_blank(),
+#       legend.position = "none",
+#       strip.text.y = element_blank()
+#     ) +
+#     labs(x = "Responses", y = NULL)
+#   
+#   availability_levels = c("available", "not_available")
+#   
+#   df_ava = dataframe %>%
+#     dplyr::filter(Year == year) %>%
+#     select(-Year)%>%
+#     dplyr::filter({{ column }} != "") %>%
+#     dplyr::filter({{ column }} %in% parameters) %>%
+#   #  mutate(across(-{{ column }}, ~ factor(.x, levels = likert_levels)))%>%
+#     #mutate(across(everything(),as.character))%>%
+#     pivot_longer(!{{ column }}, names_to = "question", values_to = "response") %>%
+#     mutate(count2 = case_when( is.na(response) ~ "not_available", TRUE ~ "available")) %>%
+#     select(-response) %>%
+#     group_by({{ column }}, question) %>%
+#     summarise(
+#       total = n(),
+#       available_percent = sum(count2 == "available") / total * 100,
+#       not_available_percent = round(sum(count2 == "not_available") / total * 100, 0),
+#       .groups = 'drop'
+#     ) %>%
+#     ungroup()%>%
+#     select({{ column }}, question,not_available_percent)
+# 
+#   
+#   v1_data = gglikert_data(dataframe%>%
+#                             dplyr::filter({{ column }} != ""), Columns, data_fun = data_fun)
+#   
+#   
+#   v3 = df_ava %>%
+#     mutate(question = interaction({{ column }}, question),
+#            question = factor(question, levels = levels(v1_data$.question))) %>%
+#     ggplot2::ggplot(aes(y = question, x = not_available_percent)) +
+# 
+#     geom_bar(stat = "identity", fill = "lightgrey") +
+#     geom_text(aes(label = ifelse(not_available_percent > 0, 
+#                                  paste0(not_available_percent, "%")," ")),
+#               position = position_stack(vjust = 0.5)
+#               ) +
+#     scale_y_discrete(
+#       labels = ~ gsub("^.*\\.", "", .x),
+#       limits = rev,
+#       expand = c(0, 0)
+#     ) +
+#     facet_wrap(
+#       facets = vars({{ column }}),
+#       labeller = labeller(
+#         .rows = function(x)
+#           label_wrap_gen(width = 10)(x)
+#       ),
+#       ncol = 1,
+#       scales = "free_y",
+#       strip.position = "left"
+#     ) +
+#     theme_light() +
+#     theme(
+#       #axis.text.y = element_blank(),
+#       panel.border = element_rect(color = "gray", fill = NA),
+#       axis.text.x = element_blank(),
+#       legend.position = "bottom",
+#       strip.text.y = element_blank()
+#     ) +
+#     labs(x =  "Not Available*", y = NULL)
+# 
+#   
+#   return(list(v1, v2, v3))
+#   
+# }
+# 
+
+
+
+
+
+double_facet_meals_likert = function(data,column,year,threshold,likert_levels,custom_colors){
+  
+  MEALS = c(
+    "Meals_Breakfast_Quality"
+    ,"Meals_Breakfast_Quantity"
+    ,"Meals_Breakfast_Variety"
+    ,"Meals_Lunch_Quality"
+    ,"Meals_Lunch_Quantity"
+    ,"Meals_Lunch_Variety"
+    ,"Meals_Dinner_Quality"
+    ,"Meals_Dinner_Quantity"
+    ,"Meals_Dinner_Variety" )
+  
+  filter_df = data%>%
+    dplyr::filter(Year == year) %>%
+    dplyr::filter({{ column }} != "") %>%
+    dplyr::filter(!is.na({{ column }})) %>%
+    dplyr::select({{ column }},Food_Benefit) %>%
+    dplyr::filter(Food_Benefit == "Meals / Catering")%>%
+    dplyr::group_by({{ column }},Food_Benefit) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::filter(n >= threshold) %>%
+    tidyr::drop_na() %>%
+    dplyr::arrange(desc(n))%>%
+    dplyr::select(-Food_Benefit)
+  
+  parameters = as.vector(filter_df[[1]])
+  
+  
+  df_group = data %>%
+    dplyr::filter(Year == year) %>%
+    #dplyr::filter(Country %in% countries) %>%
+    select({{ column }}, all_of(MEALS)) %>%
+    filter({{ column }} %in% parameters) %>%
+    dplyr::filter({{ column }} != "") %>%
+    tidyr::drop_na() %>%
+    pivot_longer(!{{ column }}, names_to = "meal_elements", values_to = "response") %>%
+    mutate(group1 = case_when(
+      str_detect(meal_elements, "Breakfast") ~ "Breakfast",
+      str_detect(meal_elements, "Lunch") ~ "Lunch",
+      str_detect(meal_elements, "Dinner") ~ "Dinner"
+    )) %>%
+    dplyr::mutate(
+      response = case_when(
+        response == 1 ~ likert_levels[1],
+        response == 2 ~ likert_levels[2],
+        response == 3 ~ likert_levels[3],
+        response == 4 ~ likert_levels[4],
+        response == 5 ~ likert_levels[5],
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    dplyr::rename(group2 = {{ column }}) %>%
+    dplyr::relocate(group2, .after = group1) %>%
+    dplyr::mutate(
+      meal_elements = case_when(
+        stringr::str_detect(meal_elements, "Quality")  ~  "Quality",
+        stringr::str_detect(meal_elements, "Quantity") ~  "Quantity",
+        stringr::str_detect(meal_elements, "Variety")  ~  "Variety"
+      )
+    ) %>%
+    dplyr::group_by(group1, group2) %>%
+    dplyr::mutate(row = row_number()) %>%
+    pivot_wider(names_from = meal_elements, values_from = response) %>%
+    dplyr::select(-row) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(group2 =  str_replace(group2, "-", "\n")) %>%
+    dplyr::mutate(across(Quality:Variety, ~ factor(.x, levels = likert_levels)))
+  
+  
+  df_group$group1 = factor(df_group$group1, levels = c("Breakfast", "Lunch", "Dinner"))
+  
+  double_facet_plot = ggstats::gglikert(
+    df_group,
+    include = Quality:Variety,
+    facet_cols = vars(group1),
+    facet_rows = vars(group2),
+    labels_size = 3
+  ) +
+    scale_x_continuous(labels = label_percent_abs(), expand = expansion(0, .2)) +
+    facet_grid(
+      cols = vars(group1),
+      rows = vars(group2),
+      labeller = labeller(.rows = label_wrap_gen(width = 5)),
+      switch = "y"
+    ) +
+    scale_y_discrete(position = "right")+
+    scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1))+
+    theme(
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0, face = "bold")   ,
+      strip.text.x = element_text(color = "black", face = "bold"),  # Set facet column text color to black
+      strip.text.y = element_text(color = "black", angle = 0, face = "bold"),  # Set facet row text color to black
+      axis.text.y.right = element_text(color = "black")  # Ensure y-axis text on the right is black
+    )
+  
+  return(double_facet_plot)
+}
+
+
+
+likert_facet_not_available = function(dataframe,
+                                      column,
+                                      Columns,
+                                      year,
+                                      Threshold,
+                                      likert_levels,
+                                      custom_color) {
+  
+  
+  require(ggstats)
+  require(dplyr)
+  require(ggplot2)
+  
+  
+  
+  
+  
+  filter_df = dataframe %>%
+    dplyr::filter(Year == year) %>%
+    dplyr::select({{ column }}) %>%
+    dplyr::filter({{ column }} != "") %>%
+    dplyr::filter(!is.na({{ column }})) %>%
+    dplyr::group_by({{ column }}) %>%
+    dplyr::count() %>%
+    dplyr::filter(n >= Threshold) %>%
+    tidyr::drop_na()
+  
+  
+  
+  
+  parameters <- as.vector(filter_df[[1]])
+  
+  
+  df = dataframe %>%
+    dplyr::filter(Year == year)%>%
+    dplyr::select({{ column }}, all_of(Columns)) %>%
+    dplyr::filter({{ column }} != "") %>%
+    dplyr::filter({{ column }} %in% parameters) %>%
+    dplyr::rename_with(
+      ~ .x %>%
+        stringr::str_remove("^Facilities[^_]*_") %>%
+        stringr::str_replace( "Recreational_Facilities_Indoor_Outdoor_Recreational_Facilities", "Facilities_Indoor_Outdoor_Facilities") %>%
+        stringr::str_replace( "Recreational_Facilities_Transportation_Outside_Working_Hours",  "Recreational_Facilities_Transportation_After_Work") %>%
+        stringr::str_replace( "Internet_Entertainment_Streaming_Platforms_", "Internet_Streaming_Platforms_") %>%
+        stringr::str_remove("^[^_]+_") %>%
+        stringr::str_remove("Quality") %>%
+        stringr::str_remove("^Facilities[^_]*_") %>%
+        stringr::str_remove("Recreational") %>%
+        stringr::str_replace_all("_", " "),
+      .cols = -{{ column }}
+    ) %>%
+    dplyr::mutate(across(
+      -{{ column }},
+      ~ case_when(
+        . == 1 ~ likert_levels[1],
+        . == 2 ~ likert_levels[2],
+        . == 3 ~ likert_levels[3],
+        . == 4 ~ likert_levels[4],
+        . == 5 ~ likert_levels[5],
+        TRUE   ~ as.character(.)
+      )
+    ))%>%
+    mutate(across(-{{ column }}, ~ factor(.x, levels = likert_levels)))
+  
+  
+  
+  data_fun = function(.data) {
+    .data %>%
+      mutate(
+        .question = interaction({{ column }}, .question),
+        .question = reorder(
+          .question,
+          ave(as.numeric(.answer), .question, FUN = \(x) {
+            sum(x %in% 4:5) / length(x[!is.na(x)])
+          }),
+          decreasing = TRUE
+        )
+      )
+  }
+  
+  
+  
+  
+  v1 = gglikert(
+    df,
+    -{{ column }},
+    facet_rows = vars({{ column }}),
+    add_totals = TRUE,
+    labels_color = "black",
+    data_fun = data_fun
+  ) +
+    scale_y_discrete(labels = ~ gsub("^.*\\.", "", .x)) +
+    scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1))+
+    labs(y = NULL) +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      axis.text.y.right = element_text(color = "black"),
+      legend.position = "bottom",
+      strip.text = element_text(color = "black", face = "bold"),
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0)
+    ) +
+    theme(strip.text.y = element_text(angle = 0)) +
+    facet_wrap(
+      facets = vars({{ column }}),
+      labeller = labeller(.rows = function(x) label_wrap_gen(width = 10)(x)),
+      ncol = 1,
+      scales = "free_y",
+      strip.position = "left"
+    ) +
+    scale_y_discrete(
+      position = "right",
+      labels = ~ gsub("^.*\\.", "", .x)
+    ) +
+    scale_fill_manual(values = custom_colors, guide = guide_legend(nrow = 1)) #+
+  
+  v2 = filter_df %>%
+    ggplot2::ggplot(aes(y = {{ column }}, x = n)) +
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = n), position = position_stack(vjust = 0.5)) +
+    scale_y_discrete(limits = rev, expand = c(0, 0)) +
+    facet_wrap(
+      facets = vars({{ column }}),
+      labeller = labeller(
+        .rows = function(x)
+          label_wrap_gen(width = 10)(x)
+      ),
+      ncol = 1,
+      scales = "free_y",
+      strip.position = "left"
+    ) +
+    theme_light() +
+    theme(
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      legend.position = "none",
+      strip.text.y = element_blank()
+    ) +
+    labs(x = "Responses", y = NULL)
+  
+  availability_levels = c("available", "not_available")
+  
+  df_ava = df%>%
+    pivot_longer(!{{ column }}, names_to = "question", values_to = "response") %>%
+    mutate(count2 = case_when( is.na(response) ~ "not_available", TRUE ~ "available")) %>%
+    select(-response) %>%
+    group_by({{ column }}, question) %>%
+    summarise(
+      total = n(),
+      available_percent = sum(count2 == "available") / total * 100,
+      not_available_percent = round(sum(count2 == "not_available") / total * 100, 0),
+      .groups = 'drop'
+    ) %>%
+    ungroup()%>%
+    select({{ column }}, question,not_available_percent)
+  
+  v1_data <- gglikert_data(df,-{{ column }}, data_fun = data_fun)
+  
+  
+  v3 = df_ava %>%
+    mutate(question = interaction({{ column }}, question),
+           question = factor(question, levels = levels(v1_data$.question))) %>%
+    ggplot2::ggplot(aes(y = question, x = not_available_percent)) +
+    
+    geom_bar(stat = "identity", fill = "lightgrey") +
+    geom_text(aes(label = ifelse(not_available_percent > 0, 
+                                 paste0(not_available_percent, "%")," ")),
+              position = position_stack(vjust = 0.5)
+    ) +
+    scale_y_discrete(
+      labels = ~ gsub("^.*\\.", "", .x),
+      limits = rev,
+      expand = c(0, 0)
+    ) +
+    facet_wrap(
+      facets = vars({{ column }}),
+      labeller = labeller(
+        .rows = function(x)
+          label_wrap_gen(width = 10)(x)
+      ),
+      ncol = 1,
+      scales = "free_y",
+      strip.position = "left"
+    ) +
+    theme_light() +
+    theme(
+      axis.text.y = element_blank(),
+      panel.border = element_rect(color = "gray", fill = NA),
+      axis.text.x = element_blank(),
+      legend.position = "bottom",
+      strip.text.y = element_blank()
+    ) +
+    labs(x =  "Not Available*", y = NULL)
+  
+  
+  return(list(v1, v2, v3))
+  
+}
+
+
