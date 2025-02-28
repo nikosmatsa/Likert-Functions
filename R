@@ -3734,3 +3734,93 @@ likert_facet_not_available = function(dataframe,
 }
 
 
+employee_table = function(data,years,type){
+  
+  require(tidyverse)
+  require(kableExtra)
+  
+  if(type == "all" ){
+      data_for_analysis = data%>%
+        dplyr::filter(Year %in% years)
+      }
+  else{
+      data_for_analysis = data%>% 
+        dplyr::filter(WorkLocationType==type) %>%
+        dplyr::filter(Year %in% years)
+    }
+  
+  df_camp = data_for_analysis %>%
+    dplyr::filter(Year %in%  years) %>%
+    dplyr::select(ID, Year, Live_in_Camp, Category) %>%
+    dplyr::filter(Category == "Camp") %>%
+    dplyr::filter(Live_in_Camp == "Yes") %>%
+    group_by(Year, Category) %>%
+    summarise(n = n()) %>%
+    mutate(condition = case_when(n >= 10 ~ "Yes", TRUE ~ "No"))
+  
+  df = data%>%
+    dplyr::filter(Year %in%  YEARS) %>%
+    dplyr::select(Year, Category, Favor) %>%
+    dplyr::filter(!(Category %in% c("Burnout", "Stress"))) %>%
+    tidyr::drop_na() %>%
+    dplyr::group_by(Year, Category, Favor) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::mutate(Percentage = round((n / sum(n) * 100), 0)) %>%
+    dplyr::select(-n)
+  
+  df = df%>%
+    dplyr::left_join(.,df_camp,by=c("Year","Category"))%>%
+    dplyr::mutate(Percentage = case_when(condition == "No" ~ 0,
+                                TRUE ~ Percentage))%>%
+    dplyr::select(-c(n,condition))%>%
+    dplyr::arrange(Category, factor(Favor, levels = c("Unfavorable", "Neutral", "Favorable")), Year) %>%
+    tidyr::pivot_wider(
+    names_from = c(Favor, Year),
+    values_from = Percentage,
+    names_sep = "_") %>%
+    dplyr::ungroup()%>%
+    dplyr::mutate(across(-1, ~replace_na(.x, 0)))
+ 
+  df = df %>%
+    dplyr::arrange(across(rev((ncol(df) - 3):ncol(df)), desc))%>%
+    dplyr::mutate(Category = gsub("&", "\\\\&", Category)) %>% 
+    dplyr::mutate(across(-Category, as.integer))%>%
+    dplyr::rename("Core Elements" = "Category")%>%
+    dplyr::mutate(across(matches("Unfavorable"), ~ cell_spec(., 
+                                                             background = case_when(
+                                                               . >= 20 & . < 30 ~ "#e09c95",   # Light red for Unfavorable 20-30
+                                                               . >= 30 ~ "#ed2e1c",            # Red for Unfavorable >=30
+                                                               TRUE ~ "#FFFFFF"                # Otherwise, make it white 
+                                                               ),color = "black"               # text black
+                                                             )))%>%
+    dplyr::mutate(across(matches("Neutral"), ~ cell_spec(.,
+                                                         background = case_when(
+                                                           . >= 30 ~ "#85c1e9",                # Blue for Neutral greater than 30
+                                                           TRUE ~ "#FFFFFF"                    # Otherwise, make it white
+                                                           ),color = "black"                   # text black
+                                                         )))%>%
+    dplyr::mutate(across(starts_with("Favorable"), ~ as.numeric(.)))%>%
+    dplyr::mutate(across(starts_with("Favorable"), ~ cell_spec(as.numeric(.),                   # Ensure numeric values
+                                                               background = case_when(
+                                                                 . >= 65 & . < 75 ~ "#7FF98B",  # Green for 65-74
+                                                                 . >= 75 ~ "#04B431",           # Dark Green for 75+
+                                                                 TRUE ~ "#FFFFFF"               # White otherwise
+                                                                 ),color = "black")))           # text black
+  header_values = c("Core Elements", rep(c(paste(years[1]), paste(years[2]), paste(years[3]), paste(years[4])), 3))
+  colnames(df)=header_values
+  table = df %>%
+    kableExtra::kbl(escape = FALSE, align = "lcccccccccccccc") %>%
+    kableExtra::add_header_above(header = c(" " = 1,
+                                            "Unfavorable" = 4,
+                                            "Neutral" = 4,
+                                            "Favorable" = 4),
+                                 border_left = T,
+                                 border_right = T) %>%
+    kableExtra::kable_styling(bootstrap_options = c("bordered"),font_size = 12) %>%
+    kableExtra::column_spec(1, border_left = TRUE, width = "5cm") %>%
+    kableExtra::column_spec(ncol(df), border_right = TRUE)%>%
+    kableExtra::collapse_rows(columns=1,valign="top")
+  
+  return(table)
+
+}
