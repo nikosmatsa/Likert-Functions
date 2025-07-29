@@ -1077,7 +1077,7 @@ employee_table = function(data,years,type){
     summarise(n = n()) %>%
     mutate(condition = case_when(n >= 10 ~ "Yes", TRUE ~ "No"))
   
-  df = data%>%
+  df = data_for_analysis%>%
     dplyr::filter(Year %in%  YEARS) %>%
     dplyr::select(Year, Category, Favor) %>%
     dplyr::filter(!(Category %in% c("Burnout", "Stress"))) %>%
