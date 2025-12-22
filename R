@@ -1,6 +1,5 @@
 
 
-
 likert_fun = function(data, col1 , cols, year, threshold,
                       sorting,likert_levels,custom_colors) {
   require(tidyverse)
@@ -1634,7 +1633,7 @@ wellness_scorecard = function(DataFrame){
       "Drinking Water"
     ),
     CCC_Target = c(
-      "18.5 ??? BMI < 25",
+      "18.5 <= BMI < 25",
       "Smokers less than 10%",
       "Minimum 150 min/week",
       "",
@@ -1669,7 +1668,7 @@ wellness_scorecard = function(DataFrame){
       paste(source[9], "% Headcount reported working more than 55 Hours/Week"),
       paste(source[10],"% did above 20 hours of charity work"),
       paste(source[11],"% did 1 to 20 hours of charity work"),
-      paste(source[12],"% didn???t do any charity work last year"),
+      paste(source[12],"% didn't do any charity work last year"),
       paste("Only",source[13],"% of respondents received \n Wellness Training last year","\n Of those who received Wellness Training:"),
       paste(source[14],"% received only 1 seminar"),
       paste(source[15],"% received 2 or more"),
@@ -1819,7 +1818,7 @@ wellness_scorecard = function(DataFrame){
                       value = flextable::as_paragraph(
                         flextable::colorize(sprintf("%.0f%%", source[12]), 
                                             color = "#ed2e1c"),
-                        flextable::as_chunk(" didn???t do any charity work last year")
+                        flextable::as_chunk(" didn't do any charity work last year")
                       ))%>%
     flextable::mk_par(
       j = "Actual Results",
@@ -2178,7 +2177,7 @@ wellness_scorecard_office = function(DataFrame){
       "Drinking Water"
     ),
     CCC_Target = c(
-      "18.5 ??? BMI < 25",
+      "18.5 <= BMI < 25",
       "Smokers less than 10%",
       "Minimum 150 min/week",
       "",
@@ -2209,7 +2208,7 @@ wellness_scorecard_office = function(DataFrame){
       paste(source[7], "% Headcount reported working more than 55 Hours/Week"),
       paste(source[8],"% did above 20 hours of charity work"),
       paste(source[9],"% did 1 to 20 hours of charity work"),
-      paste(source[10],"% didn???t do any charity work last year"),
+      paste(source[10],"% didn't do any charity work last year"),
       paste("Only",source[11],"% of respondents received Wellness Training last year","\n Of those who received Wellness Training:"),
       paste(source[12],"% received only 1 seminar"),
       paste(source[13],"% received 2 or more"),
@@ -2336,7 +2335,7 @@ wellness_scorecard_office = function(DataFrame){
                       value = flextable::as_paragraph(
                         flextable::colorize(sprintf("%.0f%%", source[10]), 
                                             color = "#ed2e1c"),
-                        flextable::as_chunk(" didn???t do any charity work last year")
+                        flextable::as_chunk(" didn't do any charity work last year")
                       ))%>%
     flextable::mk_par(
       j = "Actual Results",
@@ -2426,42 +2425,42 @@ theme_MATSAVELAS <- function(x,
   }
   
   # Count rows in each part
-  h_nrow <- flextable::nrow_part(x, "header")
-  f_nrow <- flextable::nrow_part(x, "footer")
-  b_nrow <- flextable::nrow_part(x, "body")
+  h_nrow = flextable::nrow_part(x, "header")
+  f_nrow = flextable::nrow_part(x, "footer")
+  b_nrow = flextable::nrow_part(x, "body")
   
   # Remove borders and center-align header
-  x <- border_remove(x)
-  x <- flextable::align(x, align = "center", part = "header")
+  x = flextable::border_remove(x)
+  x = flextable::align(x, align = "center", part = "header")
   
   # Apply Header Style (Bold, White Font, Dark Background)
   if (h_nrow > 0) {
-    x <- flextable::bg(x, bg = header_bg, part = "header")               # Header Background
-    x <- flextable::color(x, color = header_text, part = "header")       # Header Font Color (White)
-    x <- flextable::bold(x, bold = TRUE, part = "header")                # Bold Header Text
+    x = flextable::bg(x, bg = header_bg, part = "header")               # Header Background
+    x = flextable::color(x, color = header_text, part = "header")       # Header Font Color (White)
+    x = flextable::bold(x, bold = TRUE, part = "header")                # Bold Header Text
   }
   
   # Apply Footer Style (optional)
   if (f_nrow > 0) {
-    x <- flextable::bg(x, bg = header_bg, part = "footer")
-    x <- flextable::color(x, color = header_text, part = "footer")
-    x <- flextable::bold(x, bold = TRUE, part = "footer")
+    x = flextable::bg(x, bg = header_bg, part = "footer")
+    x = flextable::color(x, color = header_text, part = "footer")
+    x = flextable::bold(x, bold = TRUE, part = "footer")
   }
   
   # Apply Alternating Row Colors for Body with Black Font
   if (b_nrow > 0) {
-    even <- seq_len(b_nrow) %% 2 == 0
-    odd <- !even
+    even = seq_len(b_nrow) %% 2 == 0
+    odd  = !even
     
-    x <- flextable::bg(x, i = which(odd), bg = odd_body_bg, part = "body")   # Odd Rows (Light Blue-Grey)
-    x <- flextable::bg(x, i = which(even), bg = even_body_bg, part = "body") # Even Rows (White)
+    x = flextable::bg(x, i = which(odd), bg = odd_body_bg, part = "body")   # Odd Rows (Light Blue-Grey)
+    x = flextable::bg(x, i = which(even), bg = even_body_bg, part = "body") # Even Rows (White)
     
-    x <- flextable::color(x, color = body_text, part = "body")              # Body Font Color (Black)
+    x = flextable::color(x, color = body_text, part = "body")              # Body Font Color (Black)
   }
   
   # Align Text Columns Left and Numeric Columns Right
-  x <- flextable::align_text_col(x, align = "left", header = TRUE)
-  x <- flextable::align_nottext_col(x, align = "right", header = TRUE)
+  x = flextable::align_text_col(x, align = "left", header = TRUE)
+  x = flextable::align_nottext_col(x, align = "right", header = TRUE)
   
   return(x)
 }
@@ -5787,12 +5786,18 @@ client_group_theme2 = function(data,data2,year,columns,THEMES,likert_levels,
       strip.text = element_text(color = "black", face = "bold")
     ) +
     theme(strip.text.y = element_text(angle = 0)) +
-    ggforce::facet_col(
-      facets = vars(Theme),
-      # labeller = labeller(Theme = label_wrap_gen(width = 10)),
-      scales = "free_y",
-      space = "free"
-    ) +
+    facet_wrap(
+    facets = vars(Theme),
+    labeller = labeller(Theme = label_wrap_gen(width = 10)),
+    ncol = 1, scales = "free_y",
+    strip.position = "left"
+  ) +
+    # ggforce::facet_col(
+    #   facets = vars(Theme),
+    #   # labeller = labeller(Theme = label_wrap_gen(width = 10)),
+    #   scales = "free_y",
+    #   space = "free"
+    # ) +
     scale_y_discrete(
       position = "left",
       labels = function(x) str_wrap(sub(".*?\\.", "", x), width = 80)
