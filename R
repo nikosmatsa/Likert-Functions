@@ -5790,7 +5790,7 @@ client_group_theme2 = function(data,data2,year,columns,THEMES,likert_levels,
     facets = vars(Theme),
     labeller = labeller(Theme = label_wrap_gen(width = 10)),
     ncol = 1, scales = "free_y",
-    strip.position = "left"
+    strip.position = "top"
   ) +
     # ggforce::facet_col(
     #   facets = vars(Theme),
