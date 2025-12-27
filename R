@@ -1,5 +1,4 @@
 
-
 likert_fun = function(data, col1 , cols, year, threshold,
                       sorting,likert_levels,custom_colors) {
   require(tidyverse)
