@@ -6697,3 +6697,64 @@ salary_delays_table = function(data,year){
   table_df = data.frame(paste(concatenated_df$final, collapse = "\n"),check.names = FALSE)
   table_df
 }
+
+
+
+
+
+      
+merged_participants = function(data,Location){
+
+border_style = officer::fp_border(color = "#D9E1F2", width = 2)
+
+# Build the table
+FT_LIST = data %>%
+  dplyr::filter(Year == YEAR) %>%
+  dplyr::filter(Country == Location) %>%
+  dplyr::select(Country, Project_Name, Client_Company, `Response Status`) %>%
+  dplyr::distinct(Country, Project_Name, Client_Company, `Response Status`) %>%
+  dplyr::group_by(Project_Name) %>%
+  dplyr::rename(
+    "Project" = Project_Name,
+    "Client Company" = Client_Company
+  ) %>%
+  dplyr::relocate(Country) %>%
+  dplyr::arrange(Project) %>%
+  flextable::flextable() %>%
+  
+  # Merge first two columns vertically
+  flextable::merge_v(j = "Country") %>%
+  flextable::merge_v(j = "Project") %>%
+  
+  # Apply outer borders for the whole table
+  flextable::border_outer(border = border_style, part = "all") %>%
+  
+  # Apply vertical borders for columns 2:4
+  flextable::border(j = 2:4, border = border_style) %>%
+  
+  # Header styling
+  flextable::bold(part = "header") %>%
+  #bg(part = "header", bg = "#1F4E78") %>%
+  #color(part = "header", color = "#FFFFFF") %>%
+  
+  # Body styling
+  flextable::bold(j = 1, part = "body") %>%       # First column bold
+  flextable::align(j = 1, align = "center", part = "body") %>%
+  flextable::fontsize(size = 6, part = "all") %>%
+  #bg(j = 1, bg = "white", part = "body") %>%
+  
+  # PDF fix for merged-cell borders
+  flextable::fix_border_issues(part = "all")
+
+# Auto-fit function
+FitFlextableToPage <- function(ft, pgwidth){
+  ft_out = ft %>% flextable::autofit()
+  ft_out = flextable::width(ft_out, width = dim(ft_out)$widths * pgwidth / sum(dim(ft_out)$widths))
+  return(ft_out)
+}
+
+# Final output
+x = FitFlextableToPage(FT_LIST, 7)
+return(x)
+}
+
