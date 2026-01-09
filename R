@@ -1,3 +1,34 @@
+install_and_load <- function(packages) {
+  # Identify packages that are not installed
+  new_packages <- packages[!(packages %in% installed.packages()[, "Package"])]
+  
+  # Install missing packages
+  if (length(new_packages) > 0) {
+    install.packages(new_packages, dependencies = TRUE)
+  }
+  
+  # Load all packages
+  sapply(packages, function(pkg) {
+    suppressPackageStartupMessages(
+      library(pkg, character.only = TRUE)
+    )
+  })
+  
+  message("All packages are installed and loaded successfully.")
+}
+
+
+list.of.packages <- c(
+  "rlang","tidyverse","imager","gridExtra","readxl","tibble","egg","remotes",
+  "scales","dbplyr","DBI","odbc","magrittr","dplyr","wordcloud","RColorBrewer","SnowballC","tm","flextable","officer",
+  "stringr","ggh4x","ggrepel","RODBC","sf","Cairo","ggplot2","kableExtra","devtools","tidytext","tibble",
+  "Rcpp","ggstats","patchwork","rstudioapi","jsonlite","languageserver","likert","corrplot","ggforce","ggsci"
+)
+
+install_and_load(list.of.packages)
+
+
+
 
 likert_fun = function(data, col1 , cols, year, threshold,
                       sorting,likert_levels,custom_colors) {
