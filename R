@@ -846,20 +846,23 @@ likert_fun_top_location = function(data, column, threshold, year, N,likert_level
       prop = n / sum(n),
       prop_lower  = sum(prop[value %in% c("Very \n Dissatisfied", "Dissatisfied")]),
       prop_higher = sum(prop[value %in% c("Very \n Satisfied", "Satisfied")]),.by = c(var, group)) %>%
-    dplyr::arrange(group, prop_lower) %>%
+  #  dplyr::arrange(group, prop_lower) %>%
+    dplyr::arrange(group, prop_higher) %>%
     dplyr::mutate(y_sort = paste(var, group, sep = "."),y_sort = fct_inorder(y_sort))
   
   top10 = dat %>%
-    distinct(group, var, prop_lower) %>%
-    slice_max(prop_lower, n =N, by = group)
+    # distinct(group, var, prop_lower) %>%
+    distinct(group, var, prop_higher) %>%
+    # slice_max(prop_lower, n =N, by = group)
+    slice_max(prop_higher, n =N, by = group)
   
   dat = dat %>%
     semi_join(top10)
   
-  dat_tot <- dat %>%
-    distinct(group, var, y_sort, prop_lower, prop_higher) %>%
-    pivot_longer(-c(group, var, y_sort),names_to = c(".value", "name"),names_sep = "_")%>%
-    mutate(hjust_tot = ifelse(name == "lower", 1, 0),x_tot = ifelse(name == "lower", -.75, .5))
+  dat_tot = dat %>%
+    dplyr::distinct(group, var, y_sort, prop_lower, prop_higher) %>%
+    tidyr::pivot_longer(-c(group, var, y_sort),names_to = c(".value", "name"),names_sep = "_")%>%
+    dplyr::mutate(hjust_tot = ifelse(name == "lower", 1, 0),x_tot = ifelse(name == "lower", -.75, .75))
   
   v1= ggplot(dat, aes(y = y_sort, x = prop, fill = value)) +
     geom_col(position = position_likert(reverse = FALSE)) +
@@ -923,7 +926,169 @@ likert_fun_top_location = function(data, column, threshold, year, N,likert_level
 }
 
 
+likert_fun_top_location_multi = function(data,
+                      columns,          # vector of column names (character)
+                      threshold,
+                      year,
+                      N,
+                      likert_levels,
+                      custom_colors) {
+  
 
+  columns = as.character(columns)
+  columns = columns[columns %in% names(data)]
+  if (length(columns) == 0) stop("No valid columns found in `data` for `columns`.")
+  
+
+  DFcountry = data %>%
+    dplyr::filter(Year == year) %>%
+    dplyr::mutate(Location = dplyr::case_when(
+      Location == "Area/Regional offices" ~ paste(Country, "Offices", sep = " "),
+      TRUE ~ Location
+    )) %>%
+    dplyr::count(Location, name = "n") %>%
+    dplyr::filter(n >= threshold)
+  
+  parameters = DFcountry$Location
+
+  cols_syms = rlang::syms(columns)
+  
+  df = data %>%
+    tibble::as_tibble() %>%
+    dplyr::mutate(Location = dplyr::case_when(
+      Location == "Area/Regional offices" ~ paste(Country, "Offices", sep = " "),
+      TRUE ~ Location
+    )) %>%
+    dplyr::filter(Year == year) %>%
+    dplyr::filter(Location %in% parameters) %>%
+    dplyr::select(Location, !!!cols_syms) %>%
+    dplyr::rename(var = Location) %>%
+    dplyr::mutate(var = as.factor(var)) %>%
+    dplyr::mutate(
+      dplyr::across(
+        .cols = -var,
+        .fns = ~ dplyr::case_when(
+          as.character(.) == "1" ~ "Very \n Dissatisfied",
+          as.character(.) == "2" ~ "Dissatisfied",
+          as.character(.) == "3" ~ "Neutral",
+          as.character(.) == "4" ~ "Satisfied",
+          as.character(.) == "5" ~ "Very \n Satisfied",
+          TRUE ~ as.character(.)
+        )
+      )
+    )
+  
+
+  dat = df %>%
+    dplyr::mutate(dplyr::across(-var, ~ factor(.x, levels = likert_levels))) %>%
+    tidyr::pivot_longer(
+      cols      = -var,
+      values_to = "value"
+    ) %>%
+    tidyr::drop_na()%>%
+    dplyr::count(var, value, name = "n") %>%
+    tidyr::complete(var, value, fill = list(n = 0)) %>%
+    dplyr::mutate(
+      prop = n / sum(n),
+      .by  = var
+    ) %>%
+    dplyr::mutate(
+      prop_lower  = sum(prop[value %in% c("Very \n Dissatisfied", "Dissatisfied")]),
+      prop_higher = sum(prop[value %in% c("Very \n Satisfied", "Satisfied")]),
+      .by = var
+    )
+  
+
+  topN = dat %>%
+    dplyr::distinct(var, prop_higher) %>%
+    dplyr::slice_max(prop_higher, n = N)
+  
+  dat = dat %>%
+    dplyr::semi_join(topN, by = "var")
+
+  var_order = dat %>%
+    dplyr::distinct(var, prop_higher) %>%
+    dplyr::arrange(prop_higher) %>%
+    dplyr::mutate(y_sort = factor(as.character(var), levels = as.character(var)))
+  
+  dat = dat %>%
+    dplyr::left_join(var_order %>% dplyr::select(var, y_sort), by = "var")
+  
+
+  dat_tot = dat %>%
+    dplyr::distinct(var, y_sort, prop_lower, prop_higher) %>%
+    tidyr::pivot_longer(
+      -c(var, y_sort),
+      names_to  = c(".value", "name"),
+      names_sep = "_"
+    ) %>%
+    dplyr::mutate(
+      hjust_tot = ifelse(name == "lower", 1, 0),
+      x_tot     = ifelse(name == "lower", -.75,  1)
+    )
+  
+
+  v1 = ggplot2::ggplot(dat, ggplot2::aes(y = y_sort, x = prop, fill = value)) +
+    ggplot2::geom_col(position = ggstats::position_likert(reverse = FALSE)) +
+    ggplot2::geom_text(
+      ggplot2::aes(label = scales::label_percent(accuracy = 1)(prop)),
+      position = ggstats::position_likert(vjust = 0.5, reverse = FALSE),
+      size = 3.5
+    ) +
+    ggplot2::geom_label(
+      ggplot2::aes(
+        x = x_tot,
+        label = scales::label_percent(accuracy = 1)(prop),
+        hjust = hjust_tot
+      ),
+      data = dat_tot,
+      size = 3.5,
+      color = "black",
+      fontface = "bold",
+      label.size = 0,
+      fill = NA,
+      show.legend = FALSE
+    ) +
+    ggplot2::scale_x_continuous(
+      labels = scales::label_percent(),
+      expand = c(0, .15)
+    ) +
+    ggplot2::scale_fill_manual(values = custom_colors) +
+    ggplot2::theme_light() +
+    ggplot2::theme(
+      panel.border = ggplot2::element_rect(color = "gray", fill = NA),
+      panel.grid.major.y = ggplot2::element_blank(),
+      legend.position = "none",
+      axis.title = ggplot2::element_text(size = 14),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.text.x  = element_blank(),   # removes 0%, 50%, 100%
+      axis.ticks.x = element_blank()    # removes tick marks
+    ) +
+    ggplot2::labs(x = NULL, y = NULL, fill = NULL)
+ 
+
+  v2_data = df %>%
+    dplyr::count(var, name = "count") %>%
+    dplyr::semi_join(topN, by = "var") %>%
+    dplyr::left_join(var_order %>% dplyr::select(var, y_sort), by = "var")
+  
+  v2 = ggplot2::ggplot(v2_data, ggplot2::aes(y = y_sort, x = count)) +
+    ggplot2::geom_bar(stat = "identity", fill = "lightgrey") +
+    ggplot2::geom_text(ggplot2::aes(label = count),
+                       position = ggplot2::position_stack(vjust = .5)) +
+    ggplot2::labs(x = NULL, y = "") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      panel.border = ggplot2::element_rect(color = "gray", fill = NA),
+      legend.position = "none",
+      axis.text.y = ggplot2::element_blank(),
+      axis.ticks.y = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank()
+    )
+  
+  return(list(v1, v2))
+}
 
 
 grid_level_series = function(data, reason) {
@@ -1030,17 +1195,33 @@ grid_level_series_country = function(data,data_all,reason){
   
 }
 
-grid_level_series_multi = function(data, reasons) {
+grid_level_series_multi = function(data, reasons,threshold) {
+  
+  
+  
+  reasons_years =  data%>%
+    dplyr::select(Year)%>%
+    dplyr::group_by(Year)%>%
+    dplyr::summarise(n=n())%>%
+    dplyr::filter(n >=threshold)%>%
+    dplyr::select(-n)
+ 
+  
+   years_to_include = sort(unique(reasons_years$Year))
+  
+  
+  
   
   
   df = data %>%
-    select(Year,all_of(reasons)) %>%
-    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
-    select(-c(questions))%>%
-    group_by(Year,reasons) %>%
-    summarise(n = n()) %>%
-    mutate(per = round(100 * n / sum(n), 0)) %>%
-    select(-n)
+    dplyr::select(Year,all_of(reasons)) %>%
+    dplyr::filter(Year %in% years_to_include)%>%
+    tidyr::pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    dplyr::select(-c(questions))%>%
+    dplyr::group_by(Year,reasons) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::mutate(per = round(100 * n / sum(n), 0)) %>%
+    dplyr::select(-n)
   
   all_years = sort(unique(data$Year))
   
@@ -1079,29 +1260,44 @@ grid_level_series_multi = function(data, reasons) {
   return(grid_plot)
 }
 
-grid_level_series_multi_country = function(data,data_all,reasons){
+grid_level_series_multi_country = function(data,data_all,years,reasons,threshold){
+  
+  
+  reasons_years =  data%>%
+    dplyr::select(Year)%>%
+    dplyr::filter(Year  %in% years)%>%
+    dplyr::group_by(Year)%>%
+    dplyr::summarise(n=n())%>%
+    dplyr::mutate(condition = case_when(n>=threshold ~ "Yes",TRUE ~ "No"))%>%
+    dplyr::mutate(n = case_when(condition == "Yes" ~ n,TRUE ~ NA_real_))%>%
+    dplyr::select(-n)
   
   df = data%>%
-    select(Year,all_of(reasons))%>%
-    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
-    select(-c(questions))%>%
-    group_by(Year,reasons)%>%
-    summarise(n=n())%>%
-    mutate(per = round(100*n/sum(n),2)  )%>%
-    select(-n)
+    dplyr::select(Year,all_of(reasons))%>%
+    dplyr::filter(Year %in% years)%>%
+    tidyr::pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    dplyr::select(-c(questions))%>%
+    dplyr::group_by(Year,reasons)%>%
+    dplyr::summarise(n=n())%>%
+    dplyr::mutate(per = round(100*n/sum(n),2))%>%
+    dplyr::left_join(.,reasons_years,by = "Year")%>%
+    dplyr::mutate(per = case_when(condition == "Yes" ~ per,TRUE ~ NA_real_))%>%
+    dplyr::select(-c(n,condition))
   
   dfccc = data_all%>%
-    select(Year,all_of(reasons))%>%
-    pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
-    select(-c(questions))%>%
-    group_by(Year,reasons)%>%
-    summarise(n=n())%>%
-    mutate(per2 = round(100*n/sum(n),0)  )%>%
-    select(-n)
-  df = df%>%
-    left_join(.,dfccc,by=c("Year","reasons"))
+    dplyr::select(Year,all_of(reasons))%>%
+    dplyr::filter(Year %in% years)%>%
+    tidyr::pivot_longer(!Year, names_to = "questions", values_to = "reasons")%>%
+    dplyr::select(-c(questions))%>%
+    dplyr::group_by(Year,reasons)%>%
+    dplyr::summarise(n=n())%>%
+    dplyr::mutate(per2 = round(100*n/sum(n),0)  )%>%
+    dplyr::select(-n)
   
-  all_years = sort(unique(data$Year))
+  
+  df = dfccc%>%
+    dplyr::left_join(.,df,by=c("Year","reasons"))
+  
   
   
   grid_plot_multi = ggplot(df, aes(x = Year)) +
@@ -1126,7 +1322,7 @@ grid_level_series_multi_country = function(data,data_all,reasons){
                #nrow = 4,
                ncol = 2,
                strip.position = "top") +
-    scale_x_continuous(breaks = all_years) + 
+    scale_x_continuous(breaks = years) + 
     theme(
       strip.placement = "outside",
       axis.ticks.y = element_blank(),
@@ -1263,7 +1459,7 @@ employee_table = function(data,years,type){
       values_from = Percentage,
       names_sep = "_") %>%
     dplyr::ungroup()%>%
-    dplyr::mutate(across(-1, ~replace_na(.x, 0)))
+    dplyr::mutate(across(-1, ~ tidyr::replace_na(.x, 0)))
   
   df2 = df %>%
     dplyr::arrange(across(rev((ncol(df) - 3):ncol(df)), desc))%>%
@@ -1327,6 +1523,294 @@ employee_table = function(data,years,type){
   cat(df2)
   
 }
+
+employee_table_country = function(data,data2,LocationDisplay,years, type){
+  
+  require(tidyverse)
+  require(kableExtra)
+  
+  
+  df1 = data2%>%
+    dplyr::select(ID,Year,Country)%>%
+    dplyr::group_by(Year,Country)%>%
+    dplyr::summarise(n=n())%>%
+    dplyr::filter(Year %in% years)%>%
+    dplyr::mutate(condition = case_when(n >= 30 ~ "Yes", TRUE ~ "No"))%>%
+    dplyr::filter(Country==LocationDisplay)
+  
+  
+  df2_adjusted = data %>%
+    filter(Year %in% years)%>%
+    dplyr::filter(Country %in% df1$Country)%>%
+    dplyr::left_join(.,df1, by = c("Year", "Country"))%>%
+    dplyr::mutate(Favor = case_when(condition == "No"  ~ NA_character_, TRUE ~ Favor)) %>%
+    dplyr::select(-c(n#, condition
+    ))
+  
+  
+  
+  
+  if(type == "all" ){
+    df_adjusted =   df2_adjusted%>%
+      dplyr::filter(Year %in% years)
+  }else{
+    df_adjusted =   df2_adjusted%>%
+      dplyr::filter(Year %in% years)%>%
+      dplyr::mutate(WorkLocationType = str_trim(WorkLocationType))%>%
+      dplyr::filter(WorkLocationType == {{ type }})
+  }
+  
+  
+  df_camp = df_adjusted %>%
+    dplyr::filter(Year %in%  years) %>%
+    dplyr::select(ID, Year, Live_in_Camp, Category) %>%
+    dplyr::filter(Category == "Camp") %>%
+    dplyr::filter(Live_in_Camp == "Yes") %>%
+    dplyr::group_by(Year, Category) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::mutate(condition2 = case_when(n >= 10 ~ "Yes", TRUE ~ "No"))
+  # #
+  df_adj = df_adjusted %>%
+    dplyr::filter(Year %in%  years) %>%
+    dplyr::select(Year, Category, Favor,condition) %>%
+    dplyr::filter(!(Category %in% c("Burnout", "Stress"))) %>%
+    tidyr::drop_na() %>%
+    dplyr::group_by(Year, Category, Favor) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::mutate(Percentage = round((n / sum(n) * 100), 0)) %>%
+    dplyr::select(-c(n#,condition
+    ))
+  
+  df_adj = df_adj%>%
+    dplyr::left_join(.,df_camp,by=c("Year","Category"))%>%
+    #  dplyr::mutate(Favor = case_when(condition == "No"  ~ NA_character_, TRUE ~ Favor)) %>%
+    dplyr::mutate(Percentage = case_when(condition2 == "No" ~ 0,
+                                         TRUE ~ Percentage))%>%
+    dplyr::select(-c(n,condition2))%>%
+    dplyr::arrange(Category, factor(Favor, levels = c("Unfavorable", "Neutral", "Favorable")), Year)# %>%
+  
+  
+  df_all = df_adj
+  df_years = df1 %>% pull(Year)
+  
+  # years that are NOT in df1
+  years_missing = setdiff(df_years, unique(df_all$Year))
+  
+  # all categories from df1
+  all_categories = unique(df_all$Category)
+  all_favors = unique(df_all$Favor)
+  # create the missing-year rows
+  df_missing = expand.grid(
+    Year = years_missing,
+    Category = all_categories,
+    Favor = all_favors ,   # or "" if you prefer
+    Percentage = 0
+  )
+  
+  
+  df2 = bind_rows(df_all, df_missing) %>%
+    arrange(Year, Category)%>%
+    tidyr::pivot_wider(
+      names_from = c(Favor, Year),
+      values_from = Percentage,
+      names_sep = "_") %>%
+    dplyr::ungroup()%>%
+    dplyr::mutate(across(-1, ~ tidyr::replace_na(.x, 0)))%>%
+    tibble::as_tibble()
+  
+  df2 = df2 %>%
+    dplyr::arrange(across(rev((ncol(df2) - 3):ncol(df2)), desc))%>%
+    dplyr::mutate(Category = gsub("&", "\\\\&", Category)) %>%
+    dplyr::mutate(across(-Category, as.integer))%>%
+    dplyr::rename("Core Elements" = "Category")%>%
+    mutate(
+      across(.cols = 2:5,
+             ~ case_when(
+               is.na(.x) ~ "NA",
+               .x >= 20 & .x < 30 ~ paste0("\\cellcolor[HTML]{e09c95}", .x),
+               .x >= 30           ~ paste0("\\cellcolor[HTML]{ed2e1c}", .x),
+               TRUE               ~ paste0("\\cellcolor[HTML]{FFFFFF}", .x)
+             )),
+      across(.cols = 6:9,
+             ~ case_when(
+               is.na(.x) ~ "NA",
+               .x >= 30  ~ paste0("\\cellcolor[HTML]{85c1e9}", .x),
+               TRUE      ~ paste0("\\cellcolor[HTML]{FFFFFF}", .x)
+             )),
+      across(.cols = 10:13,
+             ~ case_when(
+               is.na(.x) ~ "NA",
+               .x >= 65 & .x < 75 ~ paste0("\\cellcolor[HTML]{7FF98B}", .x),
+               .x >= 75           ~ paste0("\\cellcolor[HTML]{04B431}", .x),
+               TRUE               ~ paste0("\\cellcolor[HTML]{FFFFFF}", .x)
+             )))
+  
+  header_values = c("Core Elements", rep(c(paste(years[1]), paste(years[2]), paste(years[3]), paste(years[4])), 3))
+  colnames(df2)=header_values
+  
+  df2 = df2%>%
+    kableExtra::kbl(format = "latex",  align = "lcccccccccccc", linesep = "") %>%
+    kableExtra::kable_styling(font_size = 12, bootstrap_options = c("bordered"),
+                              latex_options = "HOLD_position")%>%
+    kableExtra::column_spec(ncol(df2), border_right  = TRUE) %>%
+    kableExtra::column_spec(1, border_left = TRUE)%>%
+    kableExtra::add_header_above(header = c(" " = 1,
+                                            "Unfavorable" = 4,
+                                            "Neutral" = 4,
+                                            "Favorable" = 4),
+                                 border_left = T,
+                                 border_right = T)
+  
+  
+  
+  df2 = gsub("\\\\\\{", "{", df2)
+  df2 = gsub("\\\\\\}", "}", df2)
+  df2 = gsub("cellcolor[HTML]{ed2e1c}", "\\cellcolor[HTML]{ed2e1c}", df2, fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{e09c95}", "\\cellcolor[HTML]{e09c95}", df2, fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{85c1e9}", "\\cellcolor[HTML]{85c1e9}", df2, fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{7FF98B}", "\\cellcolor[HTML]{7FF98B}", df2, fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{04B431}", "\\cellcolor[HTML]{04B431}", df2, fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{FFFFFF}", "\\cellcolor[HTML]{FFFFFF}", df2, fixed = TRUE)
+  df2 = gsub("\\textbackslash{}", "", df2, fixed = TRUE)
+  
+  
+  # Replace \cline with hhline
+  df2 = gsub("\\cline{2-13}", "\\hhline{~----}", df2, fixed = TRUE)
+  df2 = gsub("\\cline{1-13}", "\\hhline{-----}", df2, fixed = TRUE)
+  cat(df2)
+  
+}
+
+
+
+
+emp_table = function(data, years) {
+  
+  
+  
+  df2 = df %>%
+    rename_with(
+      .cols = -1,
+      # keep first column unchanged
+      .fn = ~ {
+        n = length(years)
+        
+        # build the desired names in the exact order:
+        desired = c(
+          paste0("Unfavorable_", years),
+          paste0("Neutral_", years),
+          paste0("Favorable_", years)
+        )
+        desired[seq_along(.x)]
+      }
+    ) %>%
+    dplyr::mutate(`Core Elements` = gsub("&", "\\\\&", `Core Elements`)) %>%
+    mutate(
+      across(
+        .cols = 2:5,
+        ~ case_when(
+          is.na(.x) ~ paste0("\\cellcolor[HTML]{F2F2F2}", .x),#"NA",
+          .x >= 20 &
+            .x < 30 ~ paste0("\\cellcolor[HTML]{e09c95}", .x),
+          .x >= 30           ~ paste0("\\cellcolor[HTML]{ed2e1c}", .x),
+          TRUE               ~ paste0("\\cellcolor[HTML]{FFFFFF}", .x)
+        )
+      ),
+      across(
+        .cols = 6:9,
+        ~ case_when(
+          is.na(.x) ~ paste0("\\cellcolor[HTML]{F2F2F2}", .x),#"NA",
+          .x >= 30  ~ paste0("\\cellcolor[HTML]{85c1e9}", .x),
+          TRUE      ~ paste0("\\cellcolor[HTML]{FFFFFF}", .x)
+        )
+      ),
+      across(
+        .cols = 10:13,
+        ~ case_when(
+          is.na(.x) ~ paste0("\\cellcolor[HTML]{F2F2F2}", .x),#"NA",
+          .x >= 65 &
+            .x < 75 ~ paste0("\\cellcolor[HTML]{7FF98B}", .x),
+          .x >= 75           ~ paste0("\\cellcolor[HTML]{04B431}", .x),
+          TRUE               ~ paste0("\\cellcolor[HTML]{FFFFFF}", .x)
+        )
+      )
+    )
+  
+  header_values = c("Core Elements", rep(c(
+    paste(years[1]), paste(years[2]), paste(years[3]), paste(years[4])
+  ), 3))
+  colnames(df2) = header_values
+  
+  df2 = df2 %>%
+    kableExtra::kbl(format = "latex",
+                    align = "lcccccccccccc",
+                    linesep = "") %>%
+    kableExtra::kable_styling(
+      font_size = 12,
+      bootstrap_options = c("bordered"),
+      latex_options = "HOLD_position"
+    ) %>%
+    kableExtra::column_spec(ncol(df2), border_right  = TRUE) %>%
+    kableExtra::column_spec(1, border_left = TRUE) %>%
+    kableExtra::add_header_above(
+      header = c(
+        " " = 1,
+        "Unfavorable" = 4,
+        "Neutral" = 4,
+        "Favorable" = 4
+      ),
+      border_left = T,
+      border_right = T
+    )
+  
+  
+  
+  df2 = gsub("\\\\\\{", "{", df2)
+  df2 = gsub("\\\\\\}", "}", df2)
+  df2 = gsub("cellcolor[HTML]{ed2e1c}",
+             "\\cellcolor[HTML]{ed2e1c}",
+             df2,
+             fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{e09c95}",
+             "\\cellcolor[HTML]{e09c95}",
+             df2,
+             fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{85c1e9}",
+             "\\cellcolor[HTML]{85c1e9}",
+             df2,
+             fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{7FF98B}",
+             "\\cellcolor[HTML]{7FF98B}",
+             df2,
+             fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{04B431}",
+             "\\cellcolor[HTML]{04B431}",
+             df2,
+             fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{FFFFFF}",
+             "\\cellcolor[HTML]{FFFFFF}",
+             df2,
+             fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{F2F2F2}",
+             "\\cellcolor[HTML]{F2F2F2}",
+             df2,
+             fixed = TRUE)
+  df2 = gsub("\\textbackslash{}", "", df2, fixed = TRUE)
+  
+  
+  # Replace \cline with hhline
+  df2 = gsub("\\cline{2-13}", "\\hhline{~----}", df2, fixed = TRUE)
+  df2 = gsub("\\cline{1-13}", "\\hhline{-----}", df2, fixed = TRUE)
+  cat(df2)
+  
+}
+
+
+
+
+
+
+
 
 wellness_scorecard = function(DataFrame){
   
@@ -2451,12 +2935,12 @@ wellness_scorecard_office = function(DataFrame){
   
 }
 
-theme_MATSAVELAS <- function(x, 
-                             header_bg = "#1F4E78",   # Dark Blue-Grey for Header
-                             header_text = "#FFFFFF", # White Text for Header
-                             odd_body_bg = "#D9E1F2", # Light Blue-Grey for Odd Rows
-                             even_body_bg = "#FFFFFF",# White for Even Rows
-                             body_text = "#000000"    # Black Text for Body
+theme_MATSAVELAS = function(x, 
+                             header_bg    = "#1F4E78",   # Dark Blue-Grey for Header
+                             header_text  = "#FFFFFF",   # White Text for Header
+                             odd_body_bg  = "#D9E1F2",   # Light Blue-Grey for Odd Rows
+                             even_body_bg = "#FFFFFF",   # White for Even Rows
+                             body_text    = "#000000"    # Black Text for Body
 ) {
   if (!inherits(x, "flextable")) {
     stop(sprintf("Function `%s` supports only flextable objects.", "theme_table_style_medium9()"))
@@ -2556,7 +3040,7 @@ pie_category = function(data, column,year, view,decimal_point) {
   if(view == "percentage"){
     
     
-    df2 <- filter_df %>%
+    df2 = filter_df %>%
       mutate(
         csum = rev(cumsum(rev(per))),  
         pos = per / 2 + lead(csum, 1), 
@@ -2850,9 +3334,6 @@ likert_facet_multi_na = function(data,column,Columns,year,Threshold,likert_level
   
 }
 
-
-
-
 likert_facet_sort = function(dataframe,column,Columns,year,Threshold,likert_levels,custom_colors){
   
   
@@ -2866,7 +3347,7 @@ likert_facet_sort = function(dataframe,column,Columns,year,Threshold,likert_leve
     dplyr::filter(n>=Threshold)%>%
     tidyr::drop_na()
   
-  parameters <- as.vector(filter_df[[1]])
+  parameters = as.vector(filter_df[[1]])
   
   data_fun = function(.data) {
     .data %>%
@@ -2968,8 +3449,6 @@ likert_facet_sort = function(dataframe,column,Columns,year,Threshold,likert_leve
   
 }
 
-
-
 likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_levels,custom_colors){
   
   filter_df = dataframe %>%
@@ -2981,7 +3460,7 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     dplyr::filter(n>=Threshold)%>%
     tidyr::drop_na()
   
-  parameters <- as.vector(filter_df[[1]])
+  parameters = as.vector(filter_df[[1]])
   
   
   df_clear=dataframe%>%
@@ -2989,7 +3468,7 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     dplyr::select({{ column }},all_of(Columns))%>%
     dplyr::filter({{ column }} != "")%>%
     dplyr::filter({{ column }} %in% parameters)%>%
-    dplyr::mutate(across(-{{ column }}, ~replace_na(.x, 0)))%>%
+    dplyr::mutate(across(-{{ column }}, ~tidyr::replace_na(.x, 0)))%>%
     dplyr::rename_with(~ stringr::str_remove(.x, "^[^_]+_") %>%
                          stringr::str_replace_all("_", " "), 
                        .cols = -{{ column }})%>%
@@ -3133,8 +3612,6 @@ likert_facet_sort_na2 = function(dataframe,column,Columns,year,Threshold,likert_
     labs(x = NULL, y = NULL)
   return(list(v1,v2))
 }
-
-
 
 table_function_elements_camp = function(data,col1, questions, year,threshold,sorting) {
   
@@ -3808,7 +4285,6 @@ double_facet_meals_likert = function(data,column,year,threshold,likert_levels,cu
 }
 
 
-
 likert_facet_not_available = function(dataframe,
                                       column,
                                       Columns,
@@ -3839,7 +4315,7 @@ likert_facet_not_available = function(dataframe,
   
   
   
-  parameters <- as.vector(filter_df[[1]])
+  parameters = as.vector(filter_df[[1]])
   
   
   df = dataframe %>%
@@ -3967,7 +4443,7 @@ likert_facet_not_available = function(dataframe,
     ungroup()%>%
     select({{ column }}, question,not_available_percent)
   
-  v1_data <- gglikert_data(df,-{{ column }}, data_fun = data_fun)
+  v1_data = gglikert_data(df,-{{ column }}, data_fun = data_fun)
   
   
   v3 = df_ava %>%
@@ -4011,9 +4487,6 @@ likert_facet_not_available = function(dataframe,
 }
 
 
-
-
-
 likert_fun_camp = function(data, col1 , Columns, year, threshold,
                            likert_levels,custom_colors) {
   require(tidyverse)
@@ -4023,9 +4496,9 @@ likert_fun_camp = function(data, col1 , Columns, year, threshold,
   
   # Ensure Columns is treated correctly whether it's a single or multiple elements
   if (length(Columns) == 1) {
-    Columns <- sym(Columns)
+    Columns = sym(Columns)
   } else {
-    Columns <- syms(Columns)
+    Columns = syms(Columns)
   }
   
   
@@ -4191,7 +4664,7 @@ likert_facet_sort_numbers = function(dataframe,column,Columns,year,Threshold,lik
     dplyr::filter(n>=Threshold)%>%
     tidyr::drop_na()
   
-  parameters <- as.vector(filter_df[[1]])
+  parameters = as.vector(filter_df[[1]])
   
   data_fun = function(.data) {
     .data %>%
@@ -4366,7 +4839,7 @@ likert_facet_not_available_numbers = function(dataframe,
   
   
   
-  parameters <- as.vector(filter_df[[1]])
+  parameters = as.vector(filter_df[[1]])
   
   
   df = dataframe %>%
@@ -4473,7 +4946,7 @@ likert_facet_not_available_numbers = function(dataframe,
     ungroup()%>%
     select({{ column }}, question,not_available_percent)
   
-  v1_data <- gglikert_data(df,-{{ column }}, data_fun = data_fun)
+  v1_data = gglikert_data(df,-{{ column }}, data_fun = data_fun)
   
   
   v2 = df_ava %>%
@@ -4894,19 +5367,19 @@ country_client = function(data1,data2,data3,
     row_spec(nrow(df_final), background  = "#FFFFA0", color = "black", extra_css = "font-weight: bold;") 
   
   
-  df2 <- gsub("\\\\\\{", "{", df2)
-  df2 <- gsub("\\\\\\}", "}", df2)
-  df2 <- gsub("cellcolor[HTML]{ed2e1c}", "\\cellcolor[HTML]{ed2e1c}", df2, fixed = TRUE)
-  df2 <- gsub("cellcolor[HTML]{e09c95}", "\\cellcolor[HTML]{e09c95}", df2, fixed = TRUE) 
-  df2 <- gsub("cellcolor[HTML]{85c1e9}", "\\cellcolor[HTML]{85c1e9}", df2, fixed = TRUE) 
-  df2 <- gsub("cellcolor[HTML]{7FF98B}", "\\cellcolor[HTML]{7FF98B}", df2, fixed = TRUE) 
-  df2 <- gsub("cellcolor[HTML]{04B431}", "\\cellcolor[HTML]{04B431}", df2, fixed = TRUE) 
-  df2 <- gsub("\\textbackslash{}", "", df2, fixed = TRUE)
+  df2 = gsub("\\\\\\{", "{", df2)
+  df2 = gsub("\\\\\\}", "}", df2)
+  df2 = gsub("cellcolor[HTML]{ed2e1c}", "\\cellcolor[HTML]{ed2e1c}", df2, fixed = TRUE)
+  df2 = gsub("cellcolor[HTML]{e09c95}", "\\cellcolor[HTML]{e09c95}", df2, fixed = TRUE) 
+  df2 = gsub("cellcolor[HTML]{85c1e9}", "\\cellcolor[HTML]{85c1e9}", df2, fixed = TRUE) 
+  df2 = gsub("cellcolor[HTML]{7FF98B}", "\\cellcolor[HTML]{7FF98B}", df2, fixed = TRUE) 
+  df2 = gsub("cellcolor[HTML]{04B431}", "\\cellcolor[HTML]{04B431}", df2, fixed = TRUE) 
+  df2 = gsub("\\textbackslash{}", "", df2, fixed = TRUE)
   
   
   # Replace \cline with hhline
-  df2 <- gsub("\\cline{2-5}", "\\hhline{~----}", df2, fixed = TRUE)
-  df2 <- gsub("\\cline{1-5}", "\\hhline{-----}", df2, fixed = TRUE)
+  df2 = gsub("\\cline{2-5}", "\\hhline{~----}", df2, fixed = TRUE)
+  df2 = gsub("\\cline{1-5}", "\\hhline{-----}", df2, fixed = TRUE)
   
   
   cat(df2)
@@ -4988,7 +5461,7 @@ printDataFrame = function(dfname){
   
   colorCell_20 = function(cellValue){
     
-    #if(is.na(cellValue)){cellValue<-"No Answer";return(cellValue)}
+    #if(is.na(cellValue)){cellValue="No Answer";return(cellValue)}
     
     if(is.na(cellValue)){return(paste("\\bfseries\\LARGE","{","No Answer","}",collapse = ""))} 
     
@@ -5486,7 +5959,7 @@ group_project_client = function(data1,data3,
     )
   
   # Collapse into a single string
-  formatted_names <- paste(formatted_df$formatted, collapse = " - ")
+  formatted_names = paste(formatted_df$formatted, collapse = " - ")
   
   
   # Conditional check to format the response text
@@ -6157,13 +6630,13 @@ project_REPORT = function(data1,data3,
     mutate(across(everything(),as.character))%>%
     distinct()
   
-  
   CName = CN$Client_Company
   
   Pro_n = data1%>%
     filter(Year == year)%>%
     filter(Project_Number == project)%>%
     mutate(Project = str_replace(Project,"&","\\\\&"))%>%
+    mutate(Project = str_replace(Project,"#","\\\\#"))%>%
     mutate(Project_N = Project)%>%
     select(Project_N)%>%
     distinct()
@@ -6630,7 +7103,8 @@ salary_delays_table = function(data,year){
       names_sep = "_"
     ) %>%
     dplyr::ungroup() %>%
-    dplyr::mutate(across(-1, ~ replace_na(.x, 0)))
+    #dplyr::mutate(across(where(is.numeric),~ dplyr::na_if(.x, 0)))
+    dplyr::mutate(across(-1, ~ tidyr::replace_na(.x, 0)))
   
   df2 = df %>%
     # dplyr::arrange(across(rev((ncol(
@@ -6639,52 +7113,64 @@ salary_delays_table = function(data,year){
     dplyr::select(-Year)
   
   SalaryDelaysTable = data_for_analysis%>%
-    select(Year,Category,Favor,Salary_Delays)%>% 
-    filter(Year == YEAR)%>%
-    select(-Year)%>%
-    filter(!(Category %in% c("Burnout","Stress")))%>%
-    mutate(Category = case_when(Category== "Performance Appraisal" ~ "Performance Appraisals",
+    dplyr::select(Year,Category,Favor,Salary_Delays)%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::filter(!(Category %in% c("Burnout","Stress")))%>%
+    tidyr::drop_na() %>%
+    dplyr::mutate(Category = case_when(Category== "Performance Appraisal" ~ "Performance Appraisals",
                                 Category== "Work – Life Balance"   ~ "Work-life Balance",
                                 Category== "Compensation & Benefits" ~"Compensation \\& benefits",
                                 Category== "Team Colleagues" ~ "Team-Colleagues",
                                 TRUE ~ Category))%>%
-    group_by(Category,Salary_Delays) %>%
-    count(Favor) %>%
-    mutate(Percentage = round(n / sum(n) * 100,ROUND_DECIMAL)) %>%
-    ungroup()%>%
-    select(-n)%>%
-    pivot_wider(names_from = Favor, values_from = Percentage)%>%
-    filter(Salary_Delays=="Yes")%>%
-    select(- Salary_Delays)%>%
-    select(Category,Unfavorable,Neutral,Favorable)
+    dplyr::group_by(Year,Category,Salary_Delays) %>%
+    dplyr::count(Favor) %>%
+    dplyr::mutate(Percentage = round(n / sum(n) * 100,ROUND_DECIMAL)) %>%
+    dplyr::ungroup()%>%
+    dplyr::select(-n)%>%
+    dplyr::left_join(., df_camp, by = c("Year", "Category")) %>%
+    dplyr::mutate(Percentage = case_when(condition == "No" ~ 0, TRUE ~ Percentage)) %>%
+    dplyr::select(-c(n, condition))%>%
+    tidyr::pivot_wider(names_from = Favor, values_from = Percentage)%>%
+    dplyr::filter(Salary_Delays=="Yes")%>%
+    dplyr::select(- Salary_Delays)%>%
+    dplyr::select(Category,Unfavorable,Neutral,Favorable)%>%
+    dplyr::ungroup() %>%
+    #dplyr::mutate(across(where(is.numeric),~ dplyr::na_if(.x, 0)))   # replaces 0 with NA
+    dplyr::mutate(across(where(is.numeric), ~ tidyr::replace_na(.x, 0)))   # replaces NA with 0
   SalaryDelaysTable = data.frame(SalaryDelaysTable,check.names = FALSE)
   
   
   NoSalaryDelaysTable = data_for_analysis%>%
-    select(Year,Category,Favor,Salary_Delays)%>%
-    filter(Year == YEAR)%>%
-    select(-Year)%>%
-    filter(!(Category %in% c("Burnout","Stress")))%>%
-    mutate(Category = case_when(Category== "Performance Appraisal" ~ "Performance Appraisals",
+    dplyr::select(Year,Category,Favor,Salary_Delays)%>%
+    dplyr::filter(Year == year)%>%
+    dplyr::filter(!(Category %in% c("Burnout","Stress")))%>%
+    tidyr::drop_na() %>%
+    dplyr::mutate(Category = case_when(Category== "Performance Appraisal" ~ "Performance Appraisals",
                                 Category== "Work – Life Balance"   ~ "Work-life Balance",
                                 Category== "Compensation & Benefits" ~"Compensation \\& benefits",
                                 Category== "Team Colleagues" ~ "Team-Colleagues",
                                 TRUE ~ Category))%>%
-    group_by(Category,Salary_Delays) %>%
-    count(Favor) %>%
-    mutate(Percentage = round(n / sum(n) * 100,ROUND_DECIMAL)) %>%
-    ungroup()%>%
-    select(-n)%>%
-    pivot_wider(names_from = Favor, values_from = Percentage)%>%
-    filter(Salary_Delays=="No")%>%
-    select(- Salary_Delays)%>%
-    select(Category,Unfavorable,Neutral,Favorable)
+    dplyr::group_by(Year,Category,Salary_Delays) %>%
+    dplyr::count(Favor) %>%
+    dplyr::mutate(Percentage = round(n / sum(n) * 100,ROUND_DECIMAL)) %>%
+    dplyr::ungroup()%>%
+    dplyr::select(-n)%>%
+    dplyr::left_join(., df_camp, by = c("Year", "Category")) %>%
+    dplyr::mutate(Percentage = case_when(condition == "No" ~ 0, TRUE ~ Percentage)) %>%
+    dplyr::select(-c(n, condition))%>%
+    tidyr::pivot_wider(names_from = Favor, values_from = Percentage)%>%
+    dplyr::filter(Salary_Delays=="No")%>%
+    dplyr::select(- Salary_Delays)%>%
+    dplyr::select(Category,Unfavorable,Neutral,Favorable)%>%
+    dplyr::ungroup() %>%
+    #dplyr::mutate(across(where(is.numeric),~ dplyr::na_if(.x, 0)))   # replaces 0 with NA
+    dplyr::mutate(across(where(is.numeric), ~ tidyr::replace_na(.x, 0)))   # replaces NA with 0
   NoSalaryDelaysTable = data.frame(NoSalaryDelaysTable,check.names = FALSE)
   
   
   df2 = df2%>%tibble::as_tibble() %>%
     tibble::as_tibble() %>%
-    mutate(
+    dplyr::mutate(
       Category = as.character(Category),
       # 1) remove any existing leading/trailing double quotes (including escaped)
       Category = str_replace_all(Category, '^\\s*"?\\s*|\\s*"?\\s*$', function(x) x), # noop placeholder to ensure string type
@@ -6705,33 +7191,34 @@ salary_delays_table = function(data,year){
   NoSalaryDelaysTable = NoSalaryDelaysTable%>%tibble::as_tibble()
   
   delays_df = SalaryDelaysTable %>%
-    left_join(NoSalaryDelaysTable, by = "Category", suffix = c(".x", ".y")) %>%
-    left_join(df2, by = "Category", suffix = c("", "_Overall"))
+    dplyr::left_join(NoSalaryDelaysTable, by = "Category", suffix = c(".x", ".y")) %>%
+    dplyr::left_join(df2, by = "Category", suffix = c("", "_Overall"))%>%
+    dplyr::mutate(across(-1, ~ tidyr::replace_na(.x, 0)))
   
   df = delays_df
   
   df_color = df %>%
-    mutate(across(matches("Unfavorable"), 
+    dplyr::mutate(across(matches("Unfavorable"), 
                   ~ case_when(
                     . >= 30 ~ paste0("\\cellcolor[HTML]{ed2e1c}", . , ""),
                     . >  20 ~ paste0("\\cellcolor[HTML]{e09c95}", . , ""),
                     TRUE ~ paste0("\\cellcolor[HTML]{FFFFFF}", . , "") )))%>%
-    mutate(across(matches("Neutral"), 
+    dplyr::mutate(across(matches("Neutral"), 
                   ~ case_when(
                     . >= 30 ~ paste0("\\cellcolor[HTML]{85c1e9}", . , ""),
                     TRUE ~ paste0(. , ""))))%>%
-    mutate(across(starts_with("Favorable"), 
+    dplyr::mutate(across(starts_with("Favorable"), 
                   ~ case_when(
                     . >= 60 & . <= 75 ~ paste0("\\cellcolor[HTML]{7FF98B}", . , ""),
                     . >= 75 ~ paste0("\\cellcolor[HTML]{04B431}", . , ""),
                     TRUE ~ paste0(. , ""))))%>%
-    mutate(across(everything(),as.character))
+    dplyr::mutate(across(everything(),as.character))
   
   concatenated_df = df_color%>%
-    rowwise() %>%
-    mutate(concatenated = paste(across(everything()), collapse = " & ")) %>%
-    mutate(final = paste0(concatenated, "\\\\ \\hline"))%>%
-    select(final)
+    dplyr::rowwise() %>%
+    dplyr::mutate(concatenated = paste(across(everything()), collapse = " & ")) %>%
+    dplyr::mutate(final = paste0(concatenated, "\\\\ \\hline"))%>%
+    dplyr::select(final)
   
   table_df = data.frame(paste(concatenated_df$final, collapse = "\n"),check.names = FALSE)
   table_df
